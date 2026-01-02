@@ -7,7 +7,7 @@ const PARTY_KEY = "npcviewer:party:v1";
 let partyModal = null;
 
 // === OneDrive (Personal / Consumer) ===
-const ENTRA_CLIENT_ID = "DIN_CLIENT_ID_HÄR";
+const ENTRA_CLIENT_ID = "8ae55991-a03a-4d52-b43c-5fb67ebe2ba6";
 
 const oneDrive = createOneDriveClient({
   clientId: ENTRA_CLIENT_ID,
