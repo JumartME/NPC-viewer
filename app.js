@@ -1,8 +1,27 @@
 // app.js
+import { createOneDriveClient } from "./onedrive.js";
+
+
 const CACHE_KEY = "npcviewer:singlefile:v1";
 const IMAGE_EXTS = [".jpg", ".jpeg"];
 const PARTY_KEY = "npcviewer:party:v1";
 let partyModal = null;
+
+// === Picker config ===
+// Work/School OneDrive (vanligast om du loggar in med jobb/skola):
+//const PICKER_BASE_URL = "https://<DIN-TENANT>-my.sharepoint.com";
+
+// Om du vill stödja personliga OneDrive också, byt till:
+const ENTRA_CLIENT_ID = "c75f9a03-cc4e-4896-ac45-b068bb591a57";
+
+const oneDrive = createOneDriveClient({
+  clientId: ENTRA_CLIENT_ID,
+  // Work/school:
+  //pickerBaseUrl: "https://DIN-TENANT-my.sharepoint.com",
+  // Personal (om du istället vill):
+  pickerBaseUrl: "https://onedrive.live.com/picker",
+});
+
 
 function loadPartyIds() {
     try {
@@ -329,6 +348,12 @@ async function parseXlsx(file) {
     const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
     const npcs = rows.map(rowToNpc).filter(Boolean);
     return { updatedAt: new Date().toISOString(), count: npcs.length, npcs };
+}
+
+async function parseXlsxBuffer(buf) {
+  const wb = XLSX.read(buf, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval: "" });
 }
 
 function nameClass(n) {
@@ -808,6 +833,43 @@ els.clear.addEventListener("click", () => {
     el.addEventListener("input", render);
     el.addEventListener("change", render);
 });
+
+document.getElementById("btnOneDrive")?.addEventListener("click", async () => {
+  try {
+    setStatus("Open OneDrive folder picker...");
+    const { driveId, folderId } = await oneDrive.pickFolder();
+
+    setStatus("Loading data.xlsx + img/ ...");
+    const { json, imageResolver: resolver } = await oneDrive.loadRootFolderBundle({
+      rootDriveId: driveId,
+      rootFolderId: folderId,
+      parseXlsxBuffer,   // din befintliga funktion
+      rowsToJson,        // du behöver ha den (se nedan)
+      setStatus,
+    });
+
+    // gör resolvern global så buildRow/fillNpcModal kan använda den
+    imageResolver = resolver;
+
+    saveCache(json);
+    applyData(json);
+    setStatus(`Loaded ${json.count} NPCs from OneDrive ✔`);
+  } catch (e) {
+    console.error(e);
+    setStatus("OneDrive load failed.");
+    alert(e?.message || String(e));
+  }
+});
+
+function rowsToJson(rows) {
+  const npcs = (rows || []).map(rowToNpc).filter(Boolean);
+  return {
+    updatedAt: new Date().toISOString(),
+    count: npcs.length,
+    npcs
+  };
+}
+
 
 // "Visa alla"
 els.relAll.addEventListener("change", () => {
