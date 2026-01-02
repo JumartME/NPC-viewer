@@ -1,5 +1,5 @@
 // app.js
-import { createOneDriveClient } from "./OneDrive/onedriveClient.js";
+import { createOneDriveClient } from "./OneDrive/onedrive.js";
 
 
 const CACHE_KEY = "npcviewer:singlefile:v1";
