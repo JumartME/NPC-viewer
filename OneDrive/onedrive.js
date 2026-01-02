@@ -1,23 +1,13 @@
-// onedrive.js
-// OneDrive/Entra + Folder Picker v8 + Graph helpers + Image resolver
+// onedrive/onedrive.js
+// OneDrive (Personal/Consumer) + Folder Picker v8 + Graph helpers + Image resolver
 // Requires: msal-browser loaded globally (window.msal)
 
 function uuid() {
-  return (crypto?.randomUUID?.() ?? (String(Date.now()) + Math.random()));
+  return crypto?.randomUUID?.() ?? (String(Date.now()) + Math.random());
 }
 
 function must(condition, message) {
   if (!condition) throw new Error(message);
-}
-
-async function logout() {
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length === 0) return;
-
-  // Popup-logout funkar bäst för SPA + GitHub Pages
-  await msalInstance.logoutPopup({
-    account: accounts[0]
-  });
 }
 
 export function createOneDriveClient({
@@ -26,20 +16,26 @@ export function createOneDriveClient({
   redirectUri = window.location.origin,
   graphScopes = ["User.Read", "Files.Read"],
 
-  // For work/school OneDrive: https://<TENANT>-my.sharepoint.com
-  // For personal OneDrive: https://onedrive.live.com/picker
+  // Personal: https://onedrive.live.com/picker
+  // Work/School: https://<TENANT>-my.sharepoint.com
   pickerBaseUrl,
 
-  // Picker typically needs SharePoint MyFiles.* permission; scope format for MSAL is `${resource}/MyFiles.Read`
-  pickerScopes = null, // default computed from pickerBaseUrl
+  // Personal OneDrive: ["OneDrive.ReadOnly"] or ["OneDrive.ReadWrite"]
+  // Work/School picker: often [`${resource}/MyFiles.Read`]
+  pickerScopes = null,
 } = {}) {
   must(typeof window !== "undefined", "This module must run in a browser.");
-  must(window.msal, "msal-browser is not loaded. Add msal-browser script tag before app.js.");
+  must(window.msal, "msal-browser not loaded. Add msal-browser script tag before app.js.");
   must(clientId, "Missing clientId.");
-  must(pickerBaseUrl, "Missing pickerBaseUrl (e.g. https://TENANT-my.sharepoint.com or https://onedrive.live.com/picker).");
+  must(pickerBaseUrl, "Missing pickerBaseUrl.");
 
   const msalInstance = new window.msal.PublicClientApplication({
-    auth: { clientId, authority, redirectUri }
+    auth: {
+      clientId,
+      authority,
+      redirectUri,
+      postLogoutRedirectUri: redirectUri,
+    },
   });
 
   async function ensureLoggedIn() {
@@ -60,13 +56,19 @@ export function createOneDriveClient({
     }
   }
 
+  function defaultResourceScopes(resource) {
+    // Personal picker
+    if (resource === "https://onedrive.live.com/picker") return ["OneDrive.ReadOnly"];
+    // Work/School picker hosted on SharePoint
+    return [`${resource}/MyFiles.Read`];
+  }
+
   async function getTokenForResource(resource, scopes) {
     const account = await ensureLoggedIn();
     const useScopes =
       (scopes && scopes.length) ? scopes :
       (pickerScopes && pickerScopes.length) ? pickerScopes :
-      // default om inget angivet:
-      (resource === "https://onedrive.live.com/picker") ? ["OneDrive.ReadOnly"] : [`${resource}/MyFiles.Read`];
+      defaultResourceScopes(resource);
 
     try {
       const r = await msalInstance.acquireTokenSilent({ account, scopes: useScopes });
@@ -77,9 +79,28 @@ export function createOneDriveClient({
     }
   }
 
+  async function logout() {
+    const account = msalInstance.getAllAccounts()[0];
+    if (!account) return;
+
+    try {
+      await msalInstance.logoutPopup({
+        account,
+        postLogoutRedirectUri: redirectUri,
+        mainWindowRedirectUri: redirectUri,
+      });
+    } catch (e) {
+      console.warn("logoutPopup failed; falling back to logoutRedirect", e);
+      await msalInstance.logoutRedirect({
+        account,
+        postLogoutRedirectUri: redirectUri,
+      });
+    }
+  }
+
   async function graphFetch(token, path) {
     const res = await fetch("https://graph.microsoft.com/v1.0" + path, {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     return res;
@@ -97,37 +118,35 @@ export function createOneDriveClient({
     return res.arrayBuffer();
   }
 
-  // --- Picker v8 folder selection ---
+  // ---- Picker v8: folder selection ----
   async function pickFolder({ locale = "sv-se" } = {}) {
     const channelId = uuid();
 
-    // Picker options: folder selection
     const options = {
       sdk: "8.0",
       entry: { oneDrive: {} },
       authentication: {},
       messaging: { origin: window.location.origin, channelId },
       typesAndSources: { filters: ["folder"], mode: "folders" },
-      selection: { mode: "single" }
+      selection: { mode: "single" },
     };
 
     const pickerUrl =
       `${pickerBaseUrl}/_layouts/15/FilePicker.aspx?` +
       new URLSearchParams({
         filePicker: JSON.stringify(options),
-        locale
+        locale,
       }).toString();
 
-    // 1) Get token for picker resource (consumer: OneDrive.ReadOnly/ReadWrite)
+    // Get picker token first (may trigger login popup)
     const pickerToken = await getTokenForResource(pickerBaseUrl);
     if (!pickerToken) throw new Error("No picker token acquired.");
 
-    // 2) Open a new popup with a unique name each time (avoid reusing cross-origin windows)
+    // Open popup and POST into it (IMPORTANT: don't touch win.document)
     const popupName = `OneDrivePicker_${channelId}`;
     const win = window.open("about:blank", popupName, "width=1080,height=680");
     if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
 
-    // 3) POST into the popup by targeting it (do NOT touch win.document)
     const form = document.createElement("form");
     form.action = pickerUrl;
     form.method = "POST";
@@ -144,7 +163,6 @@ export function createOneDriveClient({
     form.submit();
     form.remove();
 
-    // 4) Wait for picker to initialize and communicate over MessagePort
     return await new Promise((resolve, reject) => {
       let port = null;
 
@@ -155,12 +173,9 @@ export function createOneDriveClient({
       };
 
       const onMessage = (event) => {
-        // Must be from the popup we opened
         if (event.source !== win) return;
-
         const msg = event.data;
 
-        // Picker initializes a channel and passes a MessagePort
         if (msg?.type === "initialize" && msg.channelId === channelId) {
           port = event.ports?.[0];
           if (!port) {
@@ -178,57 +193,49 @@ export function createOneDriveClient({
       const onPortMessage = async (e) => {
         const payload = e.data;
 
-        if (payload?.type === "command") {
-          // Always acknowledge commands
+        if (payload?.type !== "command") return;
+
+        // Always ACK
+        try { port.postMessage({ type: "acknowledge", id: payload.id }); } catch {}
+
+        const cmd = payload?.data?.command;
+
+        if (cmd === "authenticate") {
           try {
-            port.postMessage({ type: "acknowledge", id: payload.id });
-          } catch {}
-
-          const cmd = payload?.data?.command;
-
-          if (cmd === "authenticate") {
-            // Picker asks for a fresh token
-            try {
-              const t = await getTokenForResource(pickerBaseUrl);
-              port.postMessage({
-                type: "result",
-                id: payload.id,
-                data: { result: "token", token: t }
-              });
-            } catch (err) {
-              port.postMessage({
-                type: "result",
-                id: payload.id,
-                data: { result: "error", error: String(err?.message || err) }
-              });
-            }
-            return;
+            const t = await getTokenForResource(pickerBaseUrl);
+            port.postMessage({ type: "result", id: payload.id, data: { result: "token", token: t } });
+          } catch (err) {
+            port.postMessage({
+              type: "result",
+              id: payload.id,
+              data: { result: "error", error: String(err?.message || err) },
+            });
           }
+          return;
+        }
 
-          if (cmd === "pick") {
-            // Selected items (folder)
-            const items = payload?.data?.items || payload?.data?.value || [];
-            const item = items[0];
+        if (cmd === "pick") {
+          const items = payload?.data?.items || payload?.data?.value || [];
+          const item = items[0];
 
-            const driveId = item?.parentReference?.driveId;
-            const folderId = item?.id;
+          const driveId = item?.parentReference?.driveId;
+          const folderId = item?.id;
 
-            if (!driveId || !folderId) {
-              cleanup();
-              reject(new Error("Fick inget driveId/folderId från pickern."));
-              return;
-            }
-
+          if (!driveId || !folderId) {
             cleanup();
-            resolve({ driveId, folderId });
+            reject(new Error("Fick inget driveId/folderId från pickern."));
             return;
           }
 
-          if (cmd === "close") {
-            cleanup();
-            reject(new Error("Picker stängdes."));
-            return;
-          }
+          cleanup();
+          resolve({ driveId, folderId });
+          return;
+        }
+
+        if (cmd === "close") {
+          cleanup();
+          reject(new Error("Picker stängdes."));
+          return;
         }
       };
 
@@ -240,9 +247,9 @@ export function createOneDriveClient({
   async function loadRootFolderBundle({
     rootDriveId,
     rootFolderId,
-    parseXlsxBuffer,     // async (arrayBuffer)->rows
-    rowsToJson,          // (rows)-> {count, updatedAt, npcs}
-    setStatus = null,    // optional (msg)->void
+    parseXlsxBuffer, // async (arrayBuffer)->rows
+    rowsToJson,      // (rows)-> {count, updatedAt, npcs}
+    setStatus = null,
   }) {
     must(parseXlsxBuffer, "loadRootFolderBundle: missing parseXlsxBuffer(buf).");
     must(rowsToJson, "loadRootFolderBundle: missing rowsToJson(rows).");
@@ -250,16 +257,13 @@ export function createOneDriveClient({
     const token = await getGraphToken();
 
     setStatus?.("Listing folder...");
-    const rootChildren = await listChildren(
-      token, rootDriveId, rootFolderId,
-      "id,name,folder,file"
-    );
+    const rootChildren = await listChildren(token, rootDriveId, rootFolderId, "id,name,folder,file");
 
-    const excel = rootChildren.find(x => (x.name || "").toLowerCase() === "data.xlsx");
+    const excel = rootChildren.find((x) => (x.name || "").toLowerCase() === "data.xlsx");
     if (!excel) throw new Error("Hittar ingen data.xlsx i vald mapp.");
 
-    const imgFolder = rootChildren.find(x => (x.name || "").toLowerCase() === "img" && x.folder);
-    if (!imgFolder) throw new Error('Hittar ingen "img"-mapp i vald mapp.');
+    const imgFolder = rootChildren.find((x) => (x.name || "").toLowerCase() === "img" && x.folder);
+    if (!imgFolder) throw new Error('Hittar ingen \"img\"-mapp i vald mapp.');
 
     setStatus?.("Downloading data.xlsx...");
     const buf = await downloadContentArrayBuffer(token, rootDriveId, excel.id);
@@ -283,7 +287,6 @@ export function createOneDriveClient({
     const originCache = new Map();
     const norm = (s) => (s || "").trim().toLowerCase();
 
-    // If you want "name".jpg (lowercase) regardless of Excel, pass toFileStem(name)
     const stem = (name) => {
       if (typeof toFileStem === "function") return norm(toFileStem(name));
       return norm(name);
@@ -295,7 +298,7 @@ export function createOneDriveClient({
       if (cached?.folderId) return cached.folderId;
 
       const origins = await listChildrenFn(token, driveId, imgRootFolderId, "id,name,folder");
-      const folder = origins.find(x => x.folder && norm(x.name) === key);
+      const folder = origins.find((x) => x.folder && norm(x.name) === key);
       if (!folder) return null;
 
       originCache.set(key, { folderId: folder.id, map: null });
@@ -307,13 +310,10 @@ export function createOneDriveClient({
       const cached = originCache.get(key);
       if (cached?.map) return cached.map;
 
-      const folderId = cached?.folderId ?? await getOriginFolderId(origin);
+      const folderId = cached?.folderId ?? (await getOriginFolderId(origin));
       if (!folderId) return null;
 
-      const files = await listChildrenFn(
-        token, driveId, folderId,
-        "id,name,@microsoft.graph.downloadUrl,file"
-      );
+      const files = await listChildrenFn(token, driveId, folderId, "id,name,@microsoft.graph.downloadUrl,file");
 
       const map = new Map();
       for (const f of files) {
@@ -341,7 +341,6 @@ export function createOneDriveClient({
       return null;
     }
 
-    // If a downloadUrl expires, you can reset an origin cache:
     function invalidateOrigin(origin) {
       originCache.delete(norm(origin));
     }
@@ -351,13 +350,10 @@ export function createOneDriveClient({
 
   return {
     msalInstance,
-    getGraphToken,
-    graphFetch,
-    listChildren,
-    downloadContentArrayBuffer,
     logout,
     pickFolder,
+    getGraphToken,
     loadRootFolderBundle,
-    makeOneDriveImageResolver, // exported in case you want custom wiring
+    makeOneDriveImageResolver,
   };
 }
