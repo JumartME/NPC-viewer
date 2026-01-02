@@ -19,7 +19,7 @@ const oneDrive = createOneDriveClient({
   authority: "https://login.microsoftonline.com/consumers",
   pickerBaseUrl: "https://onedrive.live.com/picker",
   pickerScopes: ["OneDrive.ReadOnly"],
-  redirectUri: new URL("./", window.location.href).href
+    redirectUri: new URL("./", window.location.href).href
 });
 
 function loadPartyIds() {

@@ -127,23 +127,27 @@ export function createOneDriveClient({
       // om någon browser bråkar här, fortsätt ändå
     }
 
-    // 3) Posta form med access_token
-    const form = win.document.createElement("form");
+    // 2) öppna en NY popup med unikt namn varje gång
+    const popupName = `OneDrivePicker_${channelId}`;
+    const win = window.open("about:blank", popupName, "width=1080,height=680");
+    if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
+
+    // 3) skapa form i *parent document* och target:a popupen
+    const form = document.createElement("form");
     form.setAttribute("action", pickerUrl);
     form.setAttribute("method", "POST");
+    form.setAttribute("target", popupName);
+    form.style.display = "none";
 
-    const tokenInput = win.document.createElement("input");
-    tokenInput.setAttribute("type", "hidden");
-    tokenInput.setAttribute("name", "access_token");
-    console.log("pickerToken length:", pickerToken?.length);
-    if (!pickerToken) throw new Error("No picker token acquired.");
-
-    tokenInput.setAttribute("value", pickerToken);
+    const tokenInput = document.createElement("input");
+    tokenInput.type = "hidden";
+    tokenInput.name = "access_token";
+    tokenInput.value = pickerToken;
 
     form.appendChild(tokenInput);
-    win.document.body.appendChild(form);
+    document.body.appendChild(form);
     form.submit();
-
+    form.remove();
 
     return await new Promise((resolve, reject) => {
       let port = null;
