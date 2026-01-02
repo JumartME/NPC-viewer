@@ -10,9 +10,10 @@ let partyModal = null;
 const ENTRA_CLIENT_ID = "8ae55991-a03a-4d52-b43c-5fb67ebe2ba6";
 
 const oneDrive = createOneDriveClient({
-  clientId: "DIN_APPLICATION_CLIENT_ID",
+  clientId: "8ae55991-a03a-4d52-b43c-5fb67ebe2ba6",
   pickerBaseUrl: "https://onedrive.live.com/picker",
 });
+
 // set after OneDrive load
 let imageResolver = null;
 
