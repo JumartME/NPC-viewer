@@ -10,14 +10,9 @@ let partyModal = null;
 const ENTRA_CLIENT_ID = "8ae55991-a03a-4d52-b43c-5fb67ebe2ba6";
 
 const oneDrive = createOneDriveClient({
-  clientId: ENTRA_CLIENT_ID,
-  authority: "https://login.microsoftonline.com/consumers",
+  clientId: "DIN_APPLICATION_CLIENT_ID",
   pickerBaseUrl: "https://onedrive.live.com/picker",
-  pickerScopes: ["OneDrive.ReadOnly"],
-  // funkar både github pages och localhost (viktigt för redirect_uri)
-  redirectUri: new URL("./", window.location.href).href,
 });
-
 // set after OneDrive load
 let imageResolver = null;
 
@@ -552,25 +547,26 @@ updatePartyCount();
 
 document.getElementById("btnOneDrive")?.addEventListener("click", async () => {
   try {
-    setStatus("Open OneDrive folder picker...");
-    const { driveId, folderId } = await oneDrive.pickFolder();
+    const url = prompt(
+      "Klistra in OneDrive-länk till mappen (eller till data.xlsx):"
+    );
+    if (!url) return;
 
-    setStatus("Loading data.xlsx + img/ ...");
-    const { json, imageResolver: resolver } = await oneDrive.loadRootFolderBundle({
-      rootDriveId: driveId,
-      rootFolderId: folderId,
-      parseXlsxBuffer,
-      rowsToJson,
-      setStatus,
-    });
+    const { json, imageResolver: resolver } =
+      await oneDrive.loadFromOneDriveLink({
+        shareUrl: url,
+        parseXlsxBuffer,
+        rowsToJson,
+        setStatus,
+      });
 
     imageResolver = resolver;
     saveCache(json);
     applyData(json);
+
     setStatus(`Loaded ${json.count} NPCs from OneDrive ✔`);
   } catch (e) {
     console.error(e);
-    setStatus("OneDrive load failed.");
     alert(e?.message || String(e));
   }
 });

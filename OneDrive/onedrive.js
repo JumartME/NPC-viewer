@@ -10,6 +10,11 @@ function must(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function encodeSharingUrl(url) {
+  const b64 = btoa(unescape(encodeURIComponent(url)));
+  return "u!" + b64.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
 export function createOneDriveClient({
   clientId,
   authority = "https://login.microsoftonline.com/consumers",
@@ -57,9 +62,7 @@ export function createOneDriveClient({
   }
 
   function defaultResourceScopes(resource) {
-    // Personal picker
     if (resource === "https://onedrive.live.com/picker") return ["OneDrive.ReadOnly"];
-    // Work/School picker hosted on SharePoint
     return [`${resource}/MyFiles.Read`];
   }
 
@@ -118,7 +121,45 @@ export function createOneDriveClient({
     return res.arrayBuffer();
   }
 
-  // ---- Picker v8: folder selection ----
+  // ---- NEW: load from pasted OneDrive link (folder or file) ----
+  async function loadFromOneDriveLink({
+    shareUrl,
+    parseXlsxBuffer,
+    rowsToJson,
+    setStatus = null,
+  }) {
+    must(shareUrl, "Ingen länk angiven.");
+    must(parseXlsxBuffer, "loadFromOneDriveLink: missing parseXlsxBuffer(buf).");
+    must(rowsToJson, "loadFromOneDriveLink: missing rowsToJson(rows).");
+
+    setStatus?.("Signing in...");
+    const token = await getGraphToken();
+
+    setStatus?.("Resolving share link...");
+    const shareId = encodeSharingUrl(shareUrl);
+
+    const itemRes = await graphFetch(token, `/shares/${shareId}/driveItem`);
+    const item = await itemRes.json();
+
+    const driveId = item?.parentReference?.driveId;
+    if (!driveId) throw new Error("Kunde inte läsa driveId från länken.");
+
+    // If link is folder -> root is item.id
+    // If link is file -> root is parent folder
+    const rootFolderId = item?.folder ? item.id : item?.parentReference?.id;
+    if (!rootFolderId) throw new Error("Kunde inte avgöra root-mapp från länken.");
+
+    setStatus?.("Loading data.xlsx + img/ ...");
+    return await loadRootFolderBundle({
+      rootDriveId: driveId,
+      rootFolderId,
+      parseXlsxBuffer,
+      rowsToJson,
+      setStatus,
+    });
+  }
+
+  // ---- Picker v8: folder selection (kept, even if flaky) ----
   async function pickFolder({ locale = "sv-se" } = {}) {
     const channelId = uuid();
 
@@ -128,22 +169,20 @@ export function createOneDriveClient({
       authentication: {},
       messaging: { origin: window.location.origin, channelId },
       typesAndSources: { filters: ["folder"], mode: "folders" },
-      selection: { mode: "single" }
+      selection: { mode: "single" },
     };
 
     const pickerUrl =
       `${pickerBaseUrl}/_layouts/15/FilePicker.aspx?` +
       new URLSearchParams({
         filePicker: JSON.stringify(options),
-        locale
+        locale,
       }).toString();
 
-    // Öppna popup först (måste ske direkt på klick-eventet)
     const popupName = `OneDrivePicker_${channelId}`;
     const win = window.open("about:blank", popupName, "width=1080,height=680");
     if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
 
-    // POSTA pickern (UTAN access_token). För popup räcker det.
     const form = document.createElement("form");
     form.action = pickerUrl;
     form.method = "POST";
@@ -183,25 +222,19 @@ export function createOneDriveClient({
         const payload = e.data;
         if (payload?.type !== "command") return;
 
-        // ACK alltid
         port.postMessage({ type: "acknowledge", id: payload.id });
 
         const cmd = payload?.data?.command;
 
         if (cmd === "authenticate") {
           try {
-            // Token för pickerns baseUrl (onedrive.live.com/picker)
             const t = await getTokenForResource(pickerBaseUrl);
-            port.postMessage({
-              type: "result",
-              id: payload.id,
-              data: { result: "token", token: t }
-            });
+            port.postMessage({ type: "result", id: payload.id, data: { result: "token", token: t } });
           } catch (err) {
             port.postMessage({
               type: "result",
               id: payload.id,
-              data: { result: "error", error: String(err?.message || err) }
+              data: { result: "error", error: String(err?.message || err) },
             });
           }
           return;
@@ -238,8 +271,8 @@ export function createOneDriveClient({
   async function loadRootFolderBundle({
     rootDriveId,
     rootFolderId,
-    parseXlsxBuffer, // async (arrayBuffer)->rows
-    rowsToJson,      // (rows)-> {count, updatedAt, npcs}
+    parseXlsxBuffer,
+    rowsToJson,
     setStatus = null,
   }) {
     must(parseXlsxBuffer, "loadRootFolderBundle: missing parseXlsxBuffer(buf).");
@@ -254,7 +287,7 @@ export function createOneDriveClient({
     if (!excel) throw new Error("Hittar ingen data.xlsx i vald mapp.");
 
     const imgFolder = rootChildren.find((x) => (x.name || "").toLowerCase() === "img" && x.folder);
-    if (!imgFolder) throw new Error('Hittar ingen \"img\"-mapp i vald mapp.');
+    if (!imgFolder) throw new Error('Hittar ingen "img"-mapp i vald mapp.');
 
     setStatus?.("Downloading data.xlsx...");
     const buf = await downloadContentArrayBuffer(token, rootDriveId, excel.id);
@@ -273,7 +306,6 @@ export function createOneDriveClient({
     return { json, imageResolver, token, driveId: rootDriveId, rootFolderId };
   }
 
-  // --- Image resolver: img/<Origin>/<Name>.jpg etc, lazy per origin ---
   function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildrenFn, toFileStem = null }) {
     const originCache = new Map();
     const norm = (s) => (s || "").trim().toLowerCase();
@@ -343,6 +375,7 @@ export function createOneDriveClient({
     msalInstance,
     logout,
     pickFolder,
+    loadFromOneDriveLink,     // ✅ now exported correctly
     getGraphToken,
     loadRootFolderBundle,
     makeOneDriveImageResolver,
