@@ -22,6 +22,16 @@ const oneDrive = createOneDriveClient({
     redirectUri: new URL("./", window.location.href).href
 });
 
+document.getElementById("btnLogout")?.addEventListener("click", async () => {
+  try {
+    await oneDrive.logout();
+    alert("Logged out from Microsoft / OneDrive.");
+  } catch (e) {
+    console.error(e);
+    alert("Logout failed.");
+  }
+});
+
 function loadPartyIds() {
     try {
         const raw = localStorage.getItem(PARTY_KEY);

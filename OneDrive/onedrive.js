@@ -10,6 +10,16 @@ function must(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function logout() {
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length === 0) return;
+
+  // Popup-logout funkar bäst för SPA + GitHub Pages
+  await msalInstance.logoutPopup({
+    account: accounts[0]
+  });
+}
+
 export function createOneDriveClient({
   clientId,
   authority = "https://login.microsoftonline.com/common",
@@ -91,7 +101,7 @@ export function createOneDriveClient({
   async function pickFolder({ locale = "sv-se" } = {}) {
     const channelId = uuid();
 
-    // Picker options. Folder selection:
+    // Picker options: folder selection
     const options = {
       sdk: "8.0",
       entry: { oneDrive: {} },
@@ -101,42 +111,27 @@ export function createOneDriveClient({
       selection: { mode: "single" }
     };
 
-    const pickerUrl = `${pickerBaseUrl}/_layouts/15/FilePicker.aspx?` +
+    const pickerUrl =
+      `${pickerBaseUrl}/_layouts/15/FilePicker.aspx?` +
       new URLSearchParams({
         filePicker: JSON.stringify(options),
         locale
       }).toString();
 
-    // Token for the picker resource (SharePoint/OneDrive hosted page)
-    // 1) Hämta token först (kan trigga loginPopup)
+    // 1) Get token for picker resource (consumer: OneDrive.ReadOnly/ReadWrite)
     const pickerToken = await getTokenForResource(pickerBaseUrl);
+    if (!pickerToken) throw new Error("No picker token acquired.");
 
-    // 2) Öppna popup efter token finns
-    const win = window.open("", "OneDrivePicker", "width=1080,height=680");
-
-
-    
-    if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
-
-        // Se till att popupen har ett body-element
-    try {
-      win.document.open();
-      win.document.write("<!doctype html><html><head><title>Loading…</title></head><body></body></html>");
-      win.document.close();
-    } catch (e) {
-      // om någon browser bråkar här, fortsätt ändå
-    }
-
-    // 2) öppna en NY popup med unikt namn varje gång
+    // 2) Open a new popup with a unique name each time (avoid reusing cross-origin windows)
     const popupName = `OneDrivePicker_${channelId}`;
     const win = window.open("about:blank", popupName, "width=1080,height=680");
     if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
 
-    // 3) skapa form i *parent document* och target:a popupen
+    // 3) POST into the popup by targeting it (do NOT touch win.document)
     const form = document.createElement("form");
-    form.setAttribute("action", pickerUrl);
-    form.setAttribute("method", "POST");
-    form.setAttribute("target", popupName);
+    form.action = pickerUrl;
+    form.method = "POST";
+    form.target = popupName;
     form.style.display = "none";
 
     const tokenInput = document.createElement("input");
@@ -149,6 +144,7 @@ export function createOneDriveClient({
     form.submit();
     form.remove();
 
+    // 4) Wait for picker to initialize and communicate over MessagePort
     return await new Promise((resolve, reject) => {
       let port = null;
 
@@ -159,11 +155,20 @@ export function createOneDriveClient({
       };
 
       const onMessage = (event) => {
+        // Must be from the popup we opened
         if (event.source !== win) return;
+
         const msg = event.data;
 
+        // Picker initializes a channel and passes a MessagePort
         if (msg?.type === "initialize" && msg.channelId === channelId) {
-          port = event.ports[0];
+          port = event.ports?.[0];
+          if (!port) {
+            cleanup();
+            reject(new Error("Picker init failed (no MessagePort)."));
+            return;
+          }
+
           port.onmessage = onPortMessage;
           port.start();
           port.postMessage({ type: "activate" });
@@ -174,12 +179,15 @@ export function createOneDriveClient({
         const payload = e.data;
 
         if (payload?.type === "command") {
-          // Always acknowledge
-          port.postMessage({ type: "acknowledge", id: payload.id });
+          // Always acknowledge commands
+          try {
+            port.postMessage({ type: "acknowledge", id: payload.id });
+          } catch {}
 
           const cmd = payload?.data?.command;
 
           if (cmd === "authenticate") {
+            // Picker asks for a fresh token
             try {
               const t = await getTokenForResource(pickerBaseUrl);
               port.postMessage({
@@ -198,8 +206,10 @@ export function createOneDriveClient({
           }
 
           if (cmd === "pick") {
+            // Selected items (folder)
             const items = payload?.data?.items || payload?.data?.value || [];
             const item = items[0];
+
             const driveId = item?.parentReference?.driveId;
             const folderId = item?.id;
 
@@ -345,7 +355,7 @@ export function createOneDriveClient({
     graphFetch,
     listChildren,
     downloadContentArrayBuffer,
-
+    logout,
     pickFolder,
     loadRootFolderBundle,
     makeOneDriveImageResolver, // exported in case you want custom wiring
