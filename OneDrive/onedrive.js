@@ -107,13 +107,27 @@ export function createOneDriveClient({
         locale
       }).toString();
 
-    const win = window.open("", "OneDrivePicker", "width=1080,height=680");
-    if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
-
     // Token for the picker resource (SharePoint/OneDrive hosted page)
+    // 1) Hämta token först (kan trigga loginPopup)
     const pickerToken = await getTokenForResource(pickerBaseUrl);
 
-    // POST a form into the popup (as per picker v8 pattern)
+    // 2) Öppna popup efter token finns
+    const win = window.open("", "OneDrivePicker", "width=1080,height=680");
+
+
+    
+    if (!win) throw new Error("Popup blockerade pickern. Tillåt popups och försök igen.");
+
+        // Se till att popupen har ett body-element
+    try {
+      win.document.open();
+      win.document.write("<!doctype html><html><head><title>Loading…</title></head><body></body></html>");
+      win.document.close();
+    } catch (e) {
+      // om någon browser bråkar här, fortsätt ändå
+    }
+
+    // 3) Posta form med access_token
     const form = win.document.createElement("form");
     form.setAttribute("action", pickerUrl);
     form.setAttribute("method", "POST");
@@ -121,11 +135,15 @@ export function createOneDriveClient({
     const tokenInput = win.document.createElement("input");
     tokenInput.setAttribute("type", "hidden");
     tokenInput.setAttribute("name", "access_token");
+    console.log("pickerToken length:", pickerToken?.length);
+    if (!pickerToken) throw new Error("No picker token acquired.");
+
     tokenInput.setAttribute("value", pickerToken);
 
     form.appendChild(tokenInput);
     win.document.body.appendChild(form);
     form.submit();
+
 
     return await new Promise((resolve, reject) => {
       let port = null;
