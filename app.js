@@ -73,7 +73,6 @@ const els = {
     randomNpc: document.getElementById("randomNpc"),
     gender: document.getElementById("gender"),
     
-    fileXlsx: document.getElementById("fileXlsx"),
     clear: document.getElementById("clear"),
     
     q: document.getElementById("q"),
@@ -805,23 +804,6 @@ els.rollD12?.addEventListener("click", () => {
 });
 
 els.actRoll?.addEventListener("click", runActionRoll);
-
-els.fileXlsx.addEventListener("change", async () => {
-    const file = els.fileXlsx.files && els.fileXlsx.files[0];
-    if (!file) return;
-    
-    setStatus("Reading Excel...");
-    try {
-        const json = await parseXlsx(file);
-        saveCache(json);
-        applyData(json);
-    } catch (e) {
-        console.error(e);
-        setStatus("Failed to read Excel. Make sure it's .xlsx with headers in row 1.");
-    } finally {
-        els.fileXlsx.value = "";
-    }
-});
 
 els.clear.addEventListener("click", () => {
     clearCache();
