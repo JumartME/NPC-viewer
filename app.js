@@ -14,14 +14,14 @@ let partyModal = null;
 // Om du vill stödja personliga OneDrive också, byt till:
 const ENTRA_CLIENT_ID = "c75f9a03-cc4e-4896-ac45-b068bb591a57";
 
+const redirectUri = new URL("./", window.location.href).href;
 const oneDrive = createOneDriveClient({
   clientId: ENTRA_CLIENT_ID,
-  // Work/school:
-  //pickerBaseUrl: "https://DIN-TENANT-my.sharepoint.com",
-  // Personal (om du istället vill):
+  authority: "https://login.microsoftonline.com/consumers", // personlig OneDrive
   pickerBaseUrl: "https://onedrive.live.com/picker",
+  pickerScopes: ["OneDrive.ReadOnly"],
+  redirectUri
 });
-
 
 function loadPartyIds() {
     try {

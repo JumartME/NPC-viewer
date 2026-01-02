@@ -52,11 +52,11 @@ export function createOneDriveClient({
 
   async function getTokenForResource(resource, scopes) {
     const account = await ensureLoggedIn();
-    const useScopes = scopes && scopes.length
-      ? scopes
-      : (pickerScopes && pickerScopes.length
-          ? pickerScopes
-          : [`${resource}/MyFiles.Read`]);
+    const useScopes =
+      (scopes && scopes.length) ? scopes :
+      (pickerScopes && pickerScopes.length) ? pickerScopes :
+      // default om inget angivet:
+      (resource === "https://onedrive.live.com/picker") ? ["OneDrive.ReadOnly"] : [`${resource}/MyFiles.Read`];
 
     try {
       const r = await msalInstance.acquireTokenSilent({ account, scopes: useScopes });
