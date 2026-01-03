@@ -354,8 +354,8 @@ export function createOneDriveClient({
       const map = await buildOriginMap(origin);
       if (!map) return null;
 
-      const base = stem(npcName);
-      const candidates = [`${base}.jpg`, `${base}.jpeg`, `${base}.png`, `${base}.webp`];
+      const base = npcName.trim().toLowerCase();
+      const candidates = [`${base}.jpg`, `${base}.jpeg`];
 
       for (const c of candidates) {
         const url = map.get(c);
