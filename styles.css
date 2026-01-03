@@ -184,3 +184,55 @@
 
 .trait-item .k { color: #6c757d; }
 .trait-item .v { font-weight: 600; }
+
+
+.skills-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem .75rem;
+}
+
+@media (min-width: 992px){
+  .skills-grid{
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.skill-item{
+  display:flex;
+  justify-content:space-between;
+  gap:.5rem;
+  padding:.25rem .5rem;
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:.5rem;
+  background:#fff;
+}
+
+.skill-item .k{
+  font-weight:600;
+  font-size:.9rem;
+}
+
+.skill-item .v{
+  font-variant-numeric: tabular-nums;
+  font-weight:700;
+}
+
+.party-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.party-remove-btn:hover {
+  background: #dc3545; /* bootstrap danger */
+}

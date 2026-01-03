@@ -14,6 +14,20 @@ function normEnum(v, allowedLower, fallback) {
     : fallback;
 }
 
+export const SKILL_FIELDS = [
+  "Arts","Athletics","Ballistics","Boating","Brawl","Communication","Crafting","Culture",
+  "Domestics","Driving","Empathy","Games","Gymnastics","Insight","Knowledge","Medicine",
+  "Melee","Navigation","Observation","Performance","Piloting","Riding","Science","Stealth",
+  "Style","Survival","Technology"
+];
+
+function toNumber(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return 0;
+  const n = Number(s.replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ===== Identifierar separatorrader (oförändrat beteende)
 function isSeparatorRow(row) {
   const name = clean(row.Name);
@@ -38,6 +52,12 @@ export function rowToNpc(row) {
   const Name = clean(row.Name);
   if (!Name) return null;
   if (isSeparatorRow(row)) return null;
+
+  const skills = {};
+  for (const k of SKILL_FIELDS) {
+    const v = toNumber(row[k]);
+    if (v) skills[k] = v; // spara bara >0 (eller spara alla om du vill)
+  }
 
   return {
     id: Name.toLowerCase().replace(/\s+/g, "-"),
@@ -83,8 +103,8 @@ export function rowToNpc(row) {
     Presence: clean(row.Presence),
     Wisdom: clean(row.Wisdom),
 
-    Skills: clean(row.Skills),
     Size: clean(row.Size),
+    skills,
     Health: clean(row.Health),
     Spirit: clean(row.Spirit),
     MP: clean(row.MP),

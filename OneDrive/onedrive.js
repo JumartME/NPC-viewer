@@ -311,38 +311,36 @@ export function createOneDriveClient({
   }
 
   // --- Image resolver: img/<Origin>/<Name>.jpg|.jpeg (case-insensitive), robust downloadUrl fetch ---
+// --- Image resolver: img/<Origin>/<Name>.jpg|.jpeg (case-insensitive)
+// Exposes BOTH stable refs (driveId+itemId) and temporary download URLs.
 function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildrenFn }) {
   const norm = (s) => (s || "").trim().toLowerCase();
 
-  // Cache:
   // originKey -> { folderId, index: Map(lowerFilename -> { id, url? }) }
   const originCache = new Map();
 
-  // Build + cache origin folderId
   async function getOriginFolderId(origin) {
     const key = norm(origin);
     const cached = originCache.get(key);
     if (cached?.folderId) return cached.folderId;
 
-    // list origin folders under img/
     const origins = await listChildrenFn(token, driveId, imgRootFolderId, "id,name,folder");
-    const folder = origins.find(x => x.folder && norm(x.name) === key);
+    const folder = origins.find((x) => x.folder && norm(x.name) === key);
     if (!folder) return null;
 
     originCache.set(key, { folderId: folder.id, index: null });
     return folder.id;
   }
 
-  // Build + cache index: filename(lower) -> {id, url?}
   async function buildOriginIndex(origin) {
     const key = norm(origin);
     const cached = originCache.get(key);
     if (cached?.index) return cached.index;
 
-    const folderId = cached?.folderId ?? await getOriginFolderId(origin);
+    const folderId = cached?.folderId ?? (await getOriginFolderId(origin));
     if (!folderId) return null;
 
-    // IMPORTANT: do NOT rely on @microsoft.graph.downloadUrl here
+    // Do NOT rely on @microsoft.graph.downloadUrl here
     const files = await listChildrenFn(token, driveId, folderId, "id,name,file");
     const index = new Map();
 
@@ -355,48 +353,48 @@ function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildr
     return index;
   }
 
-  // Fetch a fresh @microsoft.graph.downloadUrl for a file id (and cache it)
-  async function getDownloadUrlById(itemId) {
+  // Fetch a fresh @microsoft.graph.downloadUrl for a file id (can expire; cache per entry)
+  async function getDownloadUrlByItemId(itemId) {
     const res = await graphFetch(token, `/drives/${driveId}/items/${itemId}`);
     const json = await res.json();
     return json?.["@microsoft.graph.downloadUrl"] || null;
   }
 
-  async function getNpcImageUrl(origin, npcName) {
+  // NEW: stable reference for caching (driveId + itemId)
+  async function getNpcImageRef(origin, npcName) {
     const index = await buildOriginIndex(origin);
     if (!index) return null;
 
     const base = norm(npcName);
-
-    // only jpg/jpeg as you want
-    const candidates = [
-      `${base}.jpg`,
-      `${base}.jpeg`,
-    ];
+    const candidates = [`${base}.jpg`, `${base}.jpeg`];
 
     for (const fileName of candidates) {
       const entry = index.get(fileName);
-      if (!entry) continue;
-
-      // cached URL?
-      if (entry.url) return entry.url;
-
-      // fetch URL once, then cache
-      const url = await getDownloadUrlById(entry.id);
-      if (url) {
-        entry.url = url;
-        return url;
-      }
+      if (entry?.id) return { driveId, itemId: entry.id, fileName };
     }
-
     return null;
+  }
+
+  // Old API: returns a temporary URL (still useful as a fallback)
+  async function getNpcImageUrl(origin, npcName) {
+    const ref = await getNpcImageRef(origin, npcName);
+    if (!ref) return null;
+
+    const url = await getDownloadUrlByItemId(ref.itemId);
+    return url || null;
   }
 
   function invalidateOrigin(origin) {
     originCache.delete(norm(origin));
   }
 
-  return { getNpcImageUrl, invalidateOrigin };
+  return {
+    driveId,
+    getNpcImageRef,
+    getDownloadUrlByItemId,
+    getNpcImageUrl,
+    invalidateOrigin,
+  };
 }
 
 

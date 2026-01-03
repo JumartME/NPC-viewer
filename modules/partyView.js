@@ -13,6 +13,7 @@ export function initPartyView({
   getNpcById = null,         // function(id) -> npc
   imageResolver = null,      // kan bytas via setter
   clearPartyAllFn = null,    // inject (från party.js i app.js)
+  onPartyChanged = null,
 } = {}) {
   const viewBtn = document.getElementById(viewBtnId);
   const modalEl = document.getElementById(modalId);
@@ -55,34 +56,21 @@ export function initPartyView({
       name.className = "party-name";
       name.textContent = npc.Name;
 
-      const removeBox = document.createElement("div");
-      removeBox.className = "party-remove form-check";
-      removeBox.addEventListener("click", (e) => e.stopPropagation());
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "party-remove-btn";
+      removeBtn.textContent = "×";
+      removeBtn.title = "Remove from party";
 
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.className = "form-check-input";
-      cb.id = `party-remove-${npc.id}`;
-
-      const lbl = document.createElement("label");
-      lbl.className = "form-check-label small";
-      lbl.setAttribute("for", cb.id);
-      lbl.textContent = "Remove";
-      lbl.addEventListener("click", (e) => e.stopPropagation());
-
-      cb.addEventListener("change", (e) => {
+      removeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         removeFromParty(npc.id);
-        render();
+        onPartyChanged?.();
       });
-      cb.addEventListener("click", (e) => e.stopPropagation());
-
-      removeBox.appendChild(cb);
-      removeBox.appendChild(lbl);
 
       tile.appendChild(img);
       tile.appendChild(name);
-      tile.appendChild(removeBox);
+      tile.appendChild(removeBtn);
 
       tile.addEventListener("click", () => {
         modal?.hide?.();
@@ -105,7 +93,7 @@ export function initPartyView({
   if (clearBtn && clearPartyAllFn) {
     clearBtn.addEventListener("click", () => {
       clearPartyAllFn();
-      render();
+      onPartyChanged?.();
     });
   }
 

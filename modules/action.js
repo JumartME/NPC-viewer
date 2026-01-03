@@ -1,12 +1,13 @@
 // modules/action.js
-// Ansvar: Action UI i NPC-modalen (choose characteristic+skill, roll)
-
-// matchar din app
 const CHARACTERISTICS = [
   "Intelligence","Perception","Will","Wits",
   "Agility","Dexterity","Stamina","Strength",
   "Expression","Instinct","Presence","Wisdom"
 ];
+
+function qs(id) {
+  return document.getElementById(id);
+}
 
 function toNumber(v) {
   const s = String(v ?? "").trim();
@@ -19,58 +20,32 @@ function rollD12() {
   return Math.floor(Math.random() * 12) + 1;
 }
 
-// Din befintliga format: "Stealth: 2, Athletics: 1" (colon krävs)
-function parseSkillsMap(skillsText) {
-  const text = String(skillsText ?? "").trim();
-  const map = new Map();
-  if (!text) return map;
-
-  const parts = text.split(/[,;\n]+/g).map(p => p.trim()).filter(Boolean);
-  for (const part of parts) {
-    const m = part.match(/^(.+?)\s*:\s*(-?\d+(?:[.,]\d+)?)\s*$/);
-    if (!m) continue;
-    const name = m[1].trim();
-    const val = Number(m[2].replace(",", "."));
-    if (!name || !Number.isFinite(val)) continue;
-    map.set(name, val);
-  }
-  return map;
-}
-
-export function initActionUI({
-  charSelectId = "actChar",
-  skillSelectId = "actSkill",
-  rollBtnId = "actRoll",
-  resultId = "actResult",
-} = {}) {
-  const charSel = document.getElementById(charSelectId);
-  const skillSel = document.getElementById(skillSelectId);
-  const rollBtn = document.getElementById(rollBtnId);
-  const resultEl = document.getElementById(resultId);
-
-  if (!charSel || !skillSel || !rollBtn || !resultEl) {
-    // om du inte har UI:t i DOM ännu: gör inget
-    return { setNpc: () => {} };
-  }
+export function initActionUI() {
+  const els = {
+    actChar: qs("actChar"),
+    actSkill: qs("actSkill"),
+    actRoll: qs("actRoll"),
+    actResult: qs("actResult"),
+  };
 
   let currentNpc = null;
 
   function setNpc(n) {
     currentNpc = n;
 
-    // characteristics
-    charSel.innerHTML = "";
+    // Characteristics
+    els.actChar.innerHTML = "";
     for (const k of CHARACTERISTICS) {
       const opt = document.createElement("option");
       opt.value = k;
       opt.textContent = `${k} (${toNumber(n?.[k])})`;
-      charSel.appendChild(opt);
+      els.actChar.appendChild(opt);
     }
 
-    // skills
-    skillSel.innerHTML = "";
-    const skillsMap = parseSkillsMap(n?.Skills);
-    const keys = Array.from(skillsMap.keys()).sort((a,b)=>a.localeCompare(b));
+    // Skills (from fields -> npc.skills)
+    els.actSkill.innerHTML = "";
+    const skills = (n?.skills && typeof n.skills === "object") ? n.skills : {};
+    const keys = Object.keys(skills).sort((a,b)=>a.localeCompare(b));
 
     if (keys.length === 0) {
       const opt = document.createElement("option");
@@ -78,44 +53,43 @@ export function initActionUI({
       opt.textContent = "No skills found";
       opt.disabled = true;
       opt.selected = true;
-      skillSel.appendChild(opt);
+      els.actSkill.appendChild(opt);
     } else {
       for (const sk of keys) {
         const opt = document.createElement("option");
         opt.value = sk;
-        opt.textContent = `${sk} (${skillsMap.get(sk)})`;
-        skillSel.appendChild(opt);
+        opt.textContent = `${sk} (${skills[sk]})`;
+        els.actSkill.appendChild(opt);
       }
     }
 
-    resultEl.innerHTML = `<span class="text-secondary">Choose values and roll.</span>`;
+    els.actResult.innerHTML = `<span class="text-secondary">Choose values and roll.</span>`;
   }
 
-  function runRoll() {
-    if (!currentNpc) {
-      resultEl.innerHTML = `<div class="text-danger fw-semibold">Open an NPC first.</div>`;
+  function runActionRoll() {
+    const n = currentNpc;
+    if (!n) {
+      els.actResult.innerHTML = `<div class="text-danger fw-semibold">Open an NPC first.</div>`;
       return;
     }
 
-    const charKey = charSel.value;
-    const skillKey = skillSel.value;
-
+    const charKey = els.actChar.value;
+    const skillKey = els.actSkill.value;
     if (!skillKey) {
-      resultEl.innerHTML = `<div class="text-danger fw-semibold">Pick a skill first.</div>`;
+      els.actResult.innerHTML = `<div class="text-danger fw-semibold">Pick a skill first.</div>`;
       return;
     }
 
-    const charVal = toNumber(currentNpc[charKey]);
-    const skillsMap = parseSkillsMap(currentNpc.Skills);
-    const skillVal = toNumber(skillsMap.get(skillKey));
+    const skills = (n.skills && typeof n.skills === "object") ? n.skills : {};
+    const charVal = toNumber(n[charKey]);
+    const skillVal = toNumber(skills[skillKey] ?? 0);
 
     const total = charVal + skillVal;
     const die = rollD12();
     const result = total - die;
-
     const ok = result >= 0;
 
-    resultEl.innerHTML = `
+    els.actResult.innerHTML = `
       <div class="fw-semibold ${ok ? "text-success" : "text-danger"}">
         ${ok ? "Success" : "Failure"} (${result})
       </div>
@@ -125,7 +99,7 @@ export function initActionUI({
     `;
   }
 
-  rollBtn.addEventListener("click", runRoll);
+  els.actRoll?.addEventListener("click", runActionRoll);
 
   return { setNpc };
 }
