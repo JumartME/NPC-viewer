@@ -42,10 +42,12 @@ window.__npc = window.__npc || {};
 
 // === OneDrive (Personal / Consumer) ===
 const ENTRA_CLIENT_ID = "8ae55991-a03a-4d52-b43c-5fb67ebe2ba6";
+const redirectUri = window.location.origin + window.location.pathname,
 
 const oneDrive = createOneDriveClient({
   clientId: ENTRA_CLIENT_ID,
   pickerBaseUrl: "https://onedrive.live.com/picker",
+  redirectUri
 });
 
 // set after OneDrive load
