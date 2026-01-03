@@ -34,6 +34,7 @@ import { initPartyView } from "./modules/partyView.js";
 
 let actionUI = null;
 let partyView = null;
+window.__npc = window.__npc || {};
 
 // === OneDrive (Personal / Consumer) ===
 const ENTRA_CLIENT_ID = "8ae55991-a03a-4d52-b43c-5fb67ebe2ba6";
@@ -248,6 +249,13 @@ function applyData(json) {
   dataset = json?.npcs ? json.npcs : [];
   initFilters();
   render();
+
+  // debug/state exposure (VIKTIGT)
+  window.__npc = window.__npc || {};
+  window.__npc.dataset = dataset;
+  window.__npc.view = view;
+  window.__npc.imageResolver = imageResolver;
+
   if (json) setStatus(`Loaded ${json.count} NPCs (cached: ${json.updatedAt})`);
   else setStatus("No cached data. Load from OneDrive to begin.");
 }
@@ -267,18 +275,17 @@ document.getElementById("btnOneDrive")?.addEventListener("click", async () => {
     if (!url) return;
 
     const { json, imageResolver: resolver } =
-      await oneDrive.loadFromOneDriveLink({
+    await oneDrive.loadFromOneDriveLink({
         shareUrl: url,
         parseXlsxBuffer,
         rowsToJson,
         setStatus,
-      });
+    });
 
-    imageResolver = resolver;
-    partyView?.setImageResolver?.(imageResolver);
-
+    imageResolver = resolver;   // <-- måste ske före applyData
     saveCache(json);
     applyData(json);
+    partyView?.setImageResolver?.(imageResolver);
 
     setStatus(`Loaded ${json.count} NPCs from OneDrive ✔`);
   } catch (e) {

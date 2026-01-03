@@ -282,7 +282,11 @@ export function createOneDriveClient({
 
     setStatus?.("Listing folder...");
     const rootChildren = await listChildren(token, rootDriveId, rootFolderId, "id,name,folder,file");
-
+    console.log("rootChildren:", rootChildren.map(x => ({
+      name: x.name,
+      folder: !!x.folder,
+      file: !!x.file
+    })));
     const excel = rootChildren.find((x) => (x.name || "").toLowerCase() === "data.xlsx");
     if (!excel) throw new Error("Hittar ingen data.xlsx i vald mapp.");
 
@@ -306,70 +310,95 @@ export function createOneDriveClient({
     return { json, imageResolver, token, driveId: rootDriveId, rootFolderId };
   }
 
-  function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildrenFn, toFileStem = null }) {
-    const originCache = new Map();
-    const norm = (s) => (s || "").trim().toLowerCase();
+  // --- Image resolver: img/<Origin>/<Name>.jpg|.jpeg (case-insensitive), robust downloadUrl fetch ---
+function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildrenFn }) {
+  const norm = (s) => (s || "").trim().toLowerCase();
 
-    const stem = (name) => {
-      if (typeof toFileStem === "function") return norm(toFileStem(name));
-      return norm(name);
-    };
+  // Cache:
+  // originKey -> { folderId, index: Map(lowerFilename -> { id, url? }) }
+  const originCache = new Map();
 
-    async function getOriginFolderId(origin) {
-      const key = norm(origin);
-      const cached = originCache.get(key);
-      if (cached?.folderId) return cached.folderId;
+  // Build + cache origin folderId
+  async function getOriginFolderId(origin) {
+    const key = norm(origin);
+    const cached = originCache.get(key);
+    if (cached?.folderId) return cached.folderId;
 
-      const origins = await listChildrenFn(token, driveId, imgRootFolderId, "id,name,folder");
-      const folder = origins.find((x) => x.folder && norm(x.name) === key);
-      if (!folder) return null;
+    // list origin folders under img/
+    const origins = await listChildrenFn(token, driveId, imgRootFolderId, "id,name,folder");
+    const folder = origins.find(x => x.folder && norm(x.name) === key);
+    if (!folder) return null;
 
-      originCache.set(key, { folderId: folder.id, map: null });
-      return folder.id;
-    }
-
-    async function buildOriginMap(origin) {
-      const key = norm(origin);
-      const cached = originCache.get(key);
-      if (cached?.map) return cached.map;
-
-      const folderId = cached?.folderId ?? (await getOriginFolderId(origin));
-      if (!folderId) return null;
-
-      const files = await listChildrenFn(token, driveId, folderId, "id,name,@microsoft.graph.downloadUrl,file");
-
-      const map = new Map();
-      for (const f of files) {
-        if (!f.file) continue;
-        const name = norm(f.name);
-        const url = f["@microsoft.graph.downloadUrl"];
-        if (url) map.set(name, url);
-      }
-
-      originCache.set(key, { folderId, map });
-      return map;
-    }
-
-    async function getNpcImageUrl(origin, npcName) {
-      const map = await buildOriginMap(origin);
-      if (!map) return null;
-
-      const base = npcName.trim().toLowerCase();
-      const candidates = [`${base}.jpg`, `${base}.jpeg`];
-
-      for (const c of candidates) {
-        const url = map.get(c);
-        if (url) return url;
-      }
-      return null;
-    }
-
-    function invalidateOrigin(origin) {
-      originCache.delete(norm(origin));
-    }
-
-    return { getNpcImageUrl, invalidateOrigin };
+    originCache.set(key, { folderId: folder.id, index: null });
+    return folder.id;
   }
+
+  // Build + cache index: filename(lower) -> {id, url?}
+  async function buildOriginIndex(origin) {
+    const key = norm(origin);
+    const cached = originCache.get(key);
+    if (cached?.index) return cached.index;
+
+    const folderId = cached?.folderId ?? await getOriginFolderId(origin);
+    if (!folderId) return null;
+
+    // IMPORTANT: do NOT rely on @microsoft.graph.downloadUrl here
+    const files = await listChildrenFn(token, driveId, folderId, "id,name,file");
+    const index = new Map();
+
+    for (const f of files) {
+      if (!f.file) continue;
+      index.set(norm(f.name), { id: f.id, url: null });
+    }
+
+    originCache.set(key, { folderId, index });
+    return index;
+  }
+
+  // Fetch a fresh @microsoft.graph.downloadUrl for a file id (and cache it)
+  async function getDownloadUrlById(itemId) {
+    const res = await graphFetch(token, `/drives/${driveId}/items/${itemId}`);
+    const json = await res.json();
+    return json?.["@microsoft.graph.downloadUrl"] || null;
+  }
+
+  async function getNpcImageUrl(origin, npcName) {
+    const index = await buildOriginIndex(origin);
+    if (!index) return null;
+
+    const base = norm(npcName);
+
+    // only jpg/jpeg as you want
+    const candidates = [
+      `${base}.jpg`,
+      `${base}.jpeg`,
+    ];
+
+    for (const fileName of candidates) {
+      const entry = index.get(fileName);
+      if (!entry) continue;
+
+      // cached URL?
+      if (entry.url) return entry.url;
+
+      // fetch URL once, then cache
+      const url = await getDownloadUrlById(entry.id);
+      if (url) {
+        entry.url = url;
+        return url;
+      }
+    }
+
+    return null;
+  }
+
+  function invalidateOrigin(origin) {
+    originCache.delete(norm(origin));
+  }
+
+  return { getNpcImageUrl, invalidateOrigin };
+}
+
 
   return {
     msalInstance,
