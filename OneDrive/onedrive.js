@@ -14,11 +14,12 @@ function encodeSharingUrl(url) {
   const b64 = btoa(unescape(encodeURIComponent(url)));
   return "u!" + b64.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
-
+const defaultRedirect =
+  window.location.origin + window.location.pathname.replace(/index\.html?$/i, "");
 export function createOneDriveClient({
   clientId,
   authority = "https://login.microsoftonline.com/consumers",
-  redirectUri = window.location.origin,
+  redirectUri = defaultRedirect,
   graphScopes = ["User.Read", "Files.Read"],
 
   // Personal: https://onedrive.live.com/picker
