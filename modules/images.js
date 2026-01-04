@@ -1,6 +1,91 @@
 // modules/images.js
 import { getImageBlob, putImageBlob } from "./imageStore.js";
 
+
+// ---- OneDrive image download queue + stats (for 1000+ NPCs) ----
+const IMG_STATS = (window.__imgStats ||= {
+  queued: 0,
+  inFlight: 0,
+  loaded: 0,
+  failed: 0,
+  missing:0,
+  lastError: null,
+});
+
+function bumpStatus() {
+  // Valfritt: om du har en statusrad i UI
+  const el = document.getElementById("status");
+  if (!el) return;
+  el.textContent =
+    `Images: ${IMG_STATS.loaded} loaded, ${IMG_STATS.failed} failed, ${IMG_STATS.missing} missing, ` +
+    `${IMG_STATS.inFlight} in-flight, ${IMG_STATS.queued} queued`;
+}
+
+// Enkel semaphore för att begränsa samtidiga fetches
+function createSemaphore(limit = 6) {
+  let active = 0;
+  const queue = [];
+  const runNext = () => {
+    if (active >= limit) return;
+    const job = queue.shift();
+    if (!job) return;
+    active++;
+    IMG_STATS.inFlight = active;
+    bumpStatus();
+    Promise.resolve()
+      .then(job.fn)
+      .then(job.resolve, job.reject)
+      .finally(() => {
+        active--;
+        IMG_STATS.inFlight = active;
+        bumpStatus();
+        runNext();
+      });
+  };
+  return {
+    enqueue(fn) {
+      IMG_STATS.queued++;
+      bumpStatus();
+      return new Promise((resolve, reject) => {
+        queue.push({
+          fn: async () => {
+            IMG_STATS.queued--;
+            bumpStatus();
+            return fn();
+          },
+          resolve,
+          reject,
+        });
+        runNext();
+      });
+    },
+  };
+}
+
+const onedriveSemaphore = createSemaphore(6);
+
+// Retry med backoff vid 429/503 (Graph throttling)
+async function fetchWithRetry(url, opts = {}, tries = 4) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      const res = await fetch(url, opts);
+      if (res.status === 429 || res.status === 503) {
+        const ra = res.headers.get("Retry-After");
+        const waitMs = ra ? (Number(ra) * 1000) : (500 * Math.pow(2, attempt));
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastErr = e;
+      await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
+    }
+  }
+  throw lastErr || new Error("fetch failed after retries");
+}
+
+
 // Endast format du faktiskt använder
 export const IMAGE_EXTS = [".jpg", ".jpeg", ".png"];
 
@@ -199,6 +284,8 @@ export async function setImgForImageEntry({
     }
 
     if (!imageResolver?.getDownloadUrlByItemId) {
+      IMG_STATS.missing++
+      bumpStatus();
       imgEl.removeAttribute("src");
       imgEl.classList.add("missing");
       return;
@@ -206,13 +293,20 @@ export async function setImgForImageEntry({
 
     const url = await imageResolver.getDownloadUrlByItemId(entry.itemId);
     if (!url) {
+      IMG_STATS.missing++;
+      bumpStatus();
       imgEl.removeAttribute("src");
       imgEl.classList.add("missing");
       return;
     }
 
-    const res = await fetch(url);
-    if (!res.ok) {
+    let res;
+    try {
+      res = await onedriveSemaphore.enqueue(() => fetchWithRetry(url));
+    } catch (e) {
+      IMG_STATS.failed++;
+      IMG_STATS.lastError = `${res.status} ${res.statusText}`;
+      bumpStatus();
       imgEl.removeAttribute("src");
       imgEl.classList.add("missing");
       return;
@@ -221,6 +315,8 @@ export async function setImgForImageEntry({
     const blob = await res.blob();
     await putImageBlob(cacheKey, blob);
     setObjectUrl(imgEl, blob);
+    IMG_STATS.loaded++;
+    bumpStatus();
     return;
   }
 
