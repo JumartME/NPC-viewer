@@ -2,14 +2,8 @@
 import { setImgForNpc } from "../images.js";
 import { inParty, addToParty } from "../party.js";
 
-export function buildRow({
-  npc,
-  index,
-  imageResolver,
-  onOpenModal,
-  onImageRefResolved,
-  onPartyChanged,
-}) {
+export function buildRow({ npc, index, imageResolver, onOpenModal, onImageRefResolved, onPartyChanged, observer })
+ {
   const card = document.createElement("div");
   card.className = "npc-card npc-row";
   card.dataset.index = String(index);
@@ -22,12 +16,16 @@ export function buildRow({
   img.className = "img";
   img.alt = npc.Name;
 
-  setImgForNpc({
-    imgEl: img,
-    npc,
-    imageResolver,
-    onImageRefResolved,
-  });
+    img.classList.add("missing");
+    img.removeAttribute("src");
+    img.loading = "lazy";
+
+    // bind NPC till img för observern
+    img.__npc = npc;
+    img.__imgLoaded = false;
+
+    // observera så vi laddar först när den syns
+    observer?.observe(img);
 
   thumb.appendChild(img);
 

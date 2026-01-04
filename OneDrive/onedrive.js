@@ -107,7 +107,11 @@ export function createOneDriveClient({
     const res = await fetch("https://graph.microsoft.com/v1.0" + path, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      const body = await res.text();
+      console.error("[Graph error]", res.status, path, body);
+      throw new Error(`${res.status} ${body}`);
+    }
     return res;
   }
 

@@ -3,50 +3,43 @@ import { buildRow } from "./card.js";
 import { setImgForNpc } from "../images.js";
 let gridImgObserver = null;
 
-function getGridImgObserver({ imageResolver, onImageRefResolved }) {
-  // Skapa en ny observer varje gång vi renderar om (vi reset:ar i renderList)
-  gridImgObserver = new IntersectionObserver(
-    
-    (entries) => {
-        if (gridImgObserver) {
-            gridImgObserver.disconnect();
-            gridImgObserver = null;
-        }
-        const observer = getGridImgObserver({ imageResolver, onImageRefResolved });
+let gridObserver = null;
 
+function resetGridObserver() {
+  if (gridObserver) {
+    gridObserver.disconnect();
+    gridObserver = null;
+  }
+}
+
+function getGridObserver({ imageResolver, onImageRefResolved }) {
+  // Skapa ny observer per render (så vi inte håller kvar gamla img refs)
+  gridObserver = new IntersectionObserver(
+    (entries) => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
 
         const imgEl = e.target;
-        gridImgObserver.unobserve(imgEl);
+        gridObserver.unobserve(imgEl);
 
-        // Undvik dubbel-laddning
-        if (imgEl.dataset.imgLoaded === "1") continue;
-        imgEl.dataset.imgLoaded = "1";
+        if (imgEl.__imgLoaded) continue;
+        imgEl.__imgLoaded = true;
 
-        // Hämta NPC-index från dataset-attribut
-        const i = Number(imgEl.dataset.npcIndex);
-        const arr = window.__npc?.view || window.__npc?.dataset || [];
-        const npc = arr[i];
+        const npc = imgEl.__npc;
         if (!npc) continue;
 
-        // Placeholder först
-        imgEl.classList.add("missing");
-        imgEl.removeAttribute("src");
-        imgEl.loading = "lazy";
-
-        // Spara index så observern kan hitta npc igen
-        imgEl.dataset.npcIndex = String(i);      // i = index i listan du renderar
-        imgEl.dataset.imgLoaded = "0";
-
-        // Lazy-load först när den syns
-        observer.observe(imgEl);
+        setImgForNpc({
+          imgEl,
+          npc,
+          imageResolver,
+          onImageRefResolved,
+        }).catch((err) => console.warn("Lazy image load failed:", err));
       }
     },
-    { rootMargin: "400px 0px 400px 0px", threshold: 0.01 }
+    { rootMargin: "400px", threshold: 0.01 }
   );
 
-  return gridImgObserver;
+  return gridObserver;
 }
 
 export function renderList({
@@ -58,6 +51,11 @@ export function renderList({
   onPartyChanged,
 }) {
   listEl.innerHTML = "";
+
+  // Lazy-load: ny observer per render
+  resetGridObserver();
+  const observer = getGridObserver({ imageResolver, onImageRefResolved });
+
   dataset.forEach((npc, i) => {
     listEl.appendChild(
       buildRow({
@@ -67,6 +65,7 @@ export function renderList({
         onOpenModal,
         onImageRefResolved,
         onPartyChanged,
+        observer, // ✅ ny
       })
     );
   });

@@ -298,6 +298,15 @@ export async function setImgForImageEntry({
 
   // OneDrive item -> IndexedDB cached blob -> downloadUrl -> fetch -> cache
   if (entry.kind === "onedrive") {
+    if (!entry.driveId || !entry.itemId) {
+      IMG_STATS.missing++;
+      IMG_STATS.lastError = "Missing driveId/itemId on OneDrive entry";
+      bumpStatus();
+      imgEl.removeAttribute("src");
+      imgEl.classList.add("missing");
+      return;
+    }
+
     const cacheKey = `${entry.driveId}:${entry.itemId}`;
 
     const cachedBlob = await getImageBlob(cacheKey);
