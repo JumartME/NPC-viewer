@@ -115,12 +115,27 @@ export function createOneDriveClient({
     return res;
   }
 
-  async function listChildren(token, driveId, itemId, select) {
-    const qs = select ? `?$select=${encodeURIComponent(select)}` : "";
-    const res = await graphFetch(token, `/drives/${driveId}/items/${itemId}/children${qs}`);
+async function listChildren(token, driveId, itemId, select) {
+  const selectQs = select ? `?$select=${encodeURIComponent(select)}` : "";
+  let url = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/children${selectQs}`;
+
+  const all = [];
+
+  while (url) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+
     const json = await res.json();
-    return json.value || [];
+    all.push(...(json.value || []));
+
+    // nextLink kan vara absolut URL
+    url = json["@odata.nextLink"] || null;
   }
+
+  return all;
+}
 
   async function downloadContentArrayBuffer(token, driveId, itemId) {
     const res = await graphFetch(token, `/drives/${driveId}/items/${itemId}/content`);
