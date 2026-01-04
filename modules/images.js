@@ -13,12 +13,35 @@ const IMG_STATS = (window.__imgStats ||= {
 });
 
 function bumpStatus() {
-  // Valfritt: om du har en statusrad i UI
-  const el = document.getElementById("status");
-  if (!el) return;
-  el.textContent =
-    `Images: ${IMG_STATS.loaded} loaded, ${IMG_STATS.failed} failed, ${IMG_STATS.missing} missing, ` +
-    `${IMG_STATS.inFlight} in-flight, ${IMG_STATS.queued} queued`;
+  // overlay
+  const overlay = document.getElementById("imgProgressOverlay");
+  const textEl = document.getElementById("imgProgressText");
+
+  const active = (IMG_STATS.queued + IMG_STATS.inFlight) > 0;
+
+  if (overlay) {
+    overlay.classList.toggle("hidden", !active);
+  }
+
+  const lines = [
+    `Loaded: ${IMG_STATS.loaded}`,
+    `Failed: ${IMG_STATS.failed}`,
+    `Missing: ${IMG_STATS.missing}`,
+    `In-flight: ${IMG_STATS.inFlight}`,
+    `Queued: ${IMG_STATS.queued}`,
+  ];
+
+  if (IMG_STATS.lastError) lines.push(`Last error: ${IMG_STATS.lastError}`);
+
+  const msg = lines.join("\n");
+
+  if (textEl) textEl.textContent = msg;
+
+  // (valfritt) uppdatera även din vanliga statusrad om du vill
+  const statusEl = document.getElementById("status");
+  if (statusEl && active) {
+    statusEl.textContent = `Images: ${IMG_STATS.loaded} loaded, ${IMG_STATS.failed} failed, ${IMG_STATS.missing} missing, ${IMG_STATS.inFlight} in-flight, ${IMG_STATS.queued} queued`;
+  }
 }
 
 // Enkel semaphore för att begränsa samtidiga fetches
