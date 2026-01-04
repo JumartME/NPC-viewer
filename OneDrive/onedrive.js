@@ -1,6 +1,7 @@
 // onedrive/onedrive.js
 // OneDrive (Personal/Consumer) + Folder Picker v8 + Graph helpers + Image resolver
 // Requires: msal-browser loaded globally (window.msal)
+import { matchImageFileNames, imageNameCandidates } from "../modules/images.js";
 
 function uuid() {
   return crypto?.randomUUID?.() ?? (String(Date.now()) + Math.random());
@@ -123,12 +124,14 @@ export function createOneDriveClient({
   }
 
   // ---- NEW: load from pasted OneDrive link (folder or file) ----
+  // ---- load from pasted OneDrive link (MUST be an Excel file link) ----
   async function loadFromOneDriveLink({
     shareUrl,
     parseXlsxBuffer,
     rowsToJson,
     setStatus = null,
   }) {
+    
     must(shareUrl, "Ingen länk angiven.");
     must(parseXlsxBuffer, "loadFromOneDriveLink: missing parseXlsxBuffer(buf).");
     must(rowsToJson, "loadFromOneDriveLink: missing rowsToJson(rows).");
@@ -142,18 +145,29 @@ export function createOneDriveClient({
     const itemRes = await graphFetch(token, `/shares/${shareId}/driveItem`);
     const item = await itemRes.json();
 
+    // ✅ KRÄV FIL
+    if (!item?.file) {
+      throw new Error("Länken måste peka på en Excel-fil (inte en mapp).");
+    }
+
+    const name = String(item?.name || "");
+    if (!name.toLowerCase().endsWith(".xlsx")) {
+      throw new Error("Länken måste peka på en .xlsx-fil.");
+    }
+
     const driveId = item?.parentReference?.driveId;
     if (!driveId) throw new Error("Kunde inte läsa driveId från länken.");
 
-    // If link is folder -> root is item.id
-    // If link is file -> root is parent folder
-    const rootFolderId = item?.folder ? item.id : item?.parentReference?.id;
-    if (!rootFolderId) throw new Error("Kunde inte avgöra root-mapp från länken.");
+    // Root = filens parent-mapp, så vi kan hitta img/ bredvid filen
+    const rootFolderId = item?.parentReference?.id;
+    if (!rootFolderId) throw new Error("Kunde inte läsa parent-mapp från länken.");
+    const excelItemId = item?.file ? item.id : null;
 
-    setStatus?.("Loading data.xlsx + img/ ...");
+    setStatus?.("Loading Excel + img/ ...");
     return await loadRootFolderBundle({
       rootDriveId: driveId,
       rootFolderId,
+      excelItemId, // <-- filen vi ska läsa
       parseXlsxBuffer,
       rowsToJson,
       setStatus,
@@ -272,6 +286,7 @@ export function createOneDriveClient({
   async function loadRootFolderBundle({
     rootDriveId,
     rootFolderId,
+    excelItemId,
     parseXlsxBuffer,
     rowsToJson,
     setStatus = null,
@@ -288,8 +303,15 @@ export function createOneDriveClient({
       folder: !!x.folder,
       file: !!x.file
     })));
-    const excel = rootChildren.find((x) => (x.name || "").toLowerCase() === "data.xlsx");
-    if (!excel) throw new Error("Hittar ingen data.xlsx i vald mapp.");
+    let excel = null;
+
+    if (excelItemId) {
+      excel = { id: excelItemId };
+    } else {
+      const excelChild = rootChildren.find(x => (x.name || "").toLowerCase() === "data.xlsx");
+      if (!excelChild) throw new Error('Hittar ingen "data.xlsx" i vald mapp.');
+      excel = excelChild;
+    }
 
     const imgFolder = rootChildren.find((x) => (x.name || "").toLowerCase() === "img" && x.folder);
     if (!imgFolder) throw new Error('Hittar ingen "img"-mapp i vald mapp.');
@@ -312,91 +334,116 @@ export function createOneDriveClient({
   }
 
   // --- Image resolver: img/<Origin>/<Name>.jpg|.jpeg (case-insensitive), robust downloadUrl fetch ---
-// --- Image resolver: img/<Origin>/<Name>.jpg|.jpeg (case-insensitive)
-// Exposes BOTH stable refs (driveId+itemId) and temporary download URLs.
-function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildrenFn }) {
-  const norm = (s) => (s || "").trim().toLowerCase();
+  // Exposes BOTH stable refs (driveId+itemId) and temporary download URLs.
+  function makeOneDriveImageResolver({ token, driveId, imgRootFolderId, listChildrenFn }) {
+    const norm = (s) => (s || "").trim().toLowerCase();
 
-  // originKey -> { folderId, index: Map(lowerFilename -> { id, url? }) }
-  const originCache = new Map();
+    // originKey -> { folderId, index: Map(lowerFilename -> { id, name, url? }) }
+    const originCache = new Map();
 
-  async function getOriginFolderId(origin) {
-    const key = norm(origin);
-    const cached = originCache.get(key);
-    if (cached?.folderId) return cached.folderId;
+    async function getOriginFolderId(origin) {
+      const key = norm(origin);
+      const cached = originCache.get(key);
+      if (cached?.folderId) return cached.folderId;
 
-    const origins = await listChildrenFn(token, driveId, imgRootFolderId, "id,name,folder");
-    const folder = origins.find((x) => x.folder && norm(x.name) === key);
-    if (!folder) return null;
+      const origins = await listChildrenFn(token, driveId, imgRootFolderId, "id,name,folder");
+      const folder = origins.find((x) => x.folder && norm(x.name) === key);
+      if (!folder) return null;
 
-    originCache.set(key, { folderId: folder.id, index: null });
-    return folder.id;
-  }
-
-  async function buildOriginIndex(origin) {
-    const key = norm(origin);
-    const cached = originCache.get(key);
-    if (cached?.index) return cached.index;
-
-    const folderId = cached?.folderId ?? (await getOriginFolderId(origin));
-    if (!folderId) return null;
-
-    // Do NOT rely on @microsoft.graph.downloadUrl here
-    const files = await listChildrenFn(token, driveId, folderId, "id,name,file");
-    const index = new Map();
-
-    for (const f of files) {
-      if (!f.file) continue;
-      index.set(norm(f.name), { id: f.id, url: null });
+      originCache.set(key, { folderId: folder.id, index: null });
+      return folder.id;
     }
 
-    originCache.set(key, { folderId, index });
-    return index;
-  }
+    async function buildOriginIndex(origin) {
+      const key = norm(origin);
+      const cached = originCache.get(key);
+      if (cached?.index) return cached.index;
 
-  // Fetch a fresh @microsoft.graph.downloadUrl for a file id (can expire; cache per entry)
-  async function getDownloadUrlByItemId(itemId) {
-    const res = await graphFetch(token, `/drives/${driveId}/items/${itemId}`);
-    const json = await res.json();
-    return json?.["@microsoft.graph.downloadUrl"] || null;
-  }
+      const folderId = cached?.folderId ?? (await getOriginFolderId(origin));
+      if (!folderId) return null;
 
-  // NEW: stable reference for caching (driveId + itemId)
-  async function getNpcImageRef(origin, npcName) {
-    const index = await buildOriginIndex(origin);
-    if (!index) return null;
+      const files = await listChildrenFn(token, driveId, folderId, "id,name,file");
+      const index = new Map();
 
-    const base = norm(npcName);
-    const candidates = [`${base}.jpg`, `${base}.jpeg`];
+      for (const f of files) {
+        if (!f.file) continue;
+        index.set(norm(f.name), { id: f.id, name: f.name, url: null });
+      }
 
-    for (const fileName of candidates) {
-      const entry = index.get(fileName);
-      if (entry?.id) return { driveId, itemId: entry.id, fileName };
+      originCache.set(key, { folderId, index });
+      return index;
     }
-    return null;
+
+    async function getDownloadUrlByItemId(itemId) {
+      const res = await graphFetch(token, `/drives/${driveId}/items/${itemId}`);
+      const json = await res.json();
+      return json?.["@microsoft.graph.downloadUrl"] || null;
+    }
+
+    // ✅ MULTI: Alla matchande bildrefs (primary först)
+    async function getNpcImageRefs(origin, npcName) {
+      const index = await buildOriginIndex(origin);
+      if (!index) return [];
+
+      const fileNames = Array.from(index.values())
+        .map((e) => e?.name)
+        .filter(Boolean);
+
+      const matchedNames = matchImageFileNames(fileNames, npcName);
+
+      const out = [];
+      for (const fileName of matchedNames) {
+        const entry = index.get(norm(fileName));
+        if (entry?.id) {
+          out.push({ driveId, itemId: entry.id, fileName: entry.name || fileName });
+        }
+      }
+      return out;
+    }
+
+    // ✅ SINGLE (bakåtkomp): Försök hitta EN bild för NPC (för gamla flöden)
+    async function getNpcImageRef(origin, npcName) {
+      const index = await buildOriginIndex(origin);
+      if (!index) return null;
+
+      // 1) Försök via multi-match (tar primary)
+      const refs = await getNpcImageRefs(origin, npcName);
+      if (refs.length) return refs[0];
+
+      // 2) Fallback: exakta filnamn av typen "Name.jpg/jpeg/png"
+      const names = imageNameCandidates(npcName);
+      const exts = [".jpg", ".jpeg", ".png"];
+
+      for (const base of names) {
+        for (const ext of exts) {
+          const fileName = `${base}${ext}`;
+          const entry = index.get(norm(fileName));
+          if (entry?.id) return { driveId, itemId: entry.id, fileName: entry.name || fileName };
+        }
+      }
+
+      return null;
+    }
+
+    async function getNpcImageUrl(origin, npcName) {
+      const ref = await getNpcImageRef(origin, npcName);
+      if (!ref) return null;
+      return await getDownloadUrlByItemId(ref.itemId);
+    }
+
+    function invalidateOrigin(origin) {
+      originCache.delete(norm(origin));
+    }
+
+    return {
+      driveId,
+      getNpcImageRefs,
+      getNpcImageRef,
+      getDownloadUrlByItemId,
+      getNpcImageUrl,
+      invalidateOrigin,
+    };
   }
-
-  // Old API: returns a temporary URL (still useful as a fallback)
-  async function getNpcImageUrl(origin, npcName) {
-    const ref = await getNpcImageRef(origin, npcName);
-    if (!ref) return null;
-
-    const url = await getDownloadUrlByItemId(ref.itemId);
-    return url || null;
-  }
-
-  function invalidateOrigin(origin) {
-    originCache.delete(norm(origin));
-  }
-
-  return {
-    driveId,
-    getNpcImageRef,
-    getDownloadUrlByItemId,
-    getNpcImageUrl,
-    invalidateOrigin,
-  };
-}
 
 
   return {

@@ -1,5 +1,6 @@
 // app.js
 import { createOneDriveClient } from "./OneDrive/onedrive.js";
+import { saveRootHandle, loadRootHandle, ensureHandlePermission } from "./modules/fsHandleStore.js";
 
 import {
   parseXlsxBuffer,
@@ -17,10 +18,7 @@ import {
   updatePartyCount,
 } from "./modules/party.js";
 
-import {
-  renderList,
-  openNpcModal,
-} from "./modules/render.js";
+import { renderList, openNpcModal } from "./modules/render/index.js";
 
 import { initActionUI } from "./modules/action.js";
 import { initDiceUI } from "./modules/dice.js";
@@ -33,8 +31,13 @@ import {
   wireRelationCheckboxes,
 } from "./modules/filters.js";
 
+import { initDataPanel } from "./modules/dataPanel.js";
+
 import { clearImageStore } from "./modules/imageStore.js";
 
+import { exportNpcsToXlsx } from "./modules/exportXlsx.js";
+
+import { pickLocalRootFolder, loadBundleFromLocalFolder } from "./modules/localFolder.js";
 
 let actionUI = null;
 let partyView = null;
@@ -53,14 +56,50 @@ const oneDrive = createOneDriveClient({
 // set after OneDrive load
 let imageResolver = null;
 
-function openNpc(npc) {
-  openNpcModal({ npc, imageResolver, onImageRefResolved: scheduleSaveCache, onPartyChanged });
-  actionUI?.setNpc?.(npc);
-  
+async function tryReconnectLocalFolder() {
+  try {
+    const rootHandle = await loadRootHandle();
+    if (!rootHandle) return false;
+
+    const ok = await ensureHandlePermission(rootHandle, "read");
+    if (!ok) return false;
+
+    const { imageResolver: resolver } = await loadBundleFromLocalFolder({
+      rootHandle,
+      parseXlsxBuffer,
+      rowsToJson,
+      setStatus,
+    });
+
+    setImageResolver(resolver);
+    render();
+    setStatus("Reconnected local folder images ✔");
+    return true;
+  } catch (e) {
+    console.warn("Local folder reconnect failed:", e);
+    return false;
+  }
 }
+
+
+function openNpc(npc) {
+  openNpcModal({
+    npc,
+    imageResolver,
+    onImageRefResolved: (npc) => scheduleSaveCache(),
+    onPartyChanged,
+    onNpcChanged: () => {
+      scheduleSaveCache();
+      render(); // uppdatera listan (namnfärg/pills osv)
+    },
+  });
+
+  actionUI?.setNpc?.(npc);
+}
+
 // ---------- DOM ----------
 const els = {
-  traitsGrid: document.getElementById("traitsGrid"),
+  charsGrid: document.getElementById("charsGrid"),
   actChar: document.getElementById("actChar"),
   actSkill: document.getElementById("actSkill"),
   actRoll: document.getElementById("actRoll"),
@@ -84,6 +123,24 @@ function setStatus(msg) {
   if (els.status) els.status.textContent = msg || "";
 }
 
+function pickRandomFrom(arr) {
+  if (!arr || arr.length === 0) return null;
+  const i = Math.floor(Math.random() * arr.length);
+  return arr[i] ?? null;
+}
+
+function openRandomNpc() {
+  // Välj från current view (dvs filtrerat/sorterat), annars hela datasetet
+  const source = (view && view.length) ? view : dataset;
+  const npc = pickRandomFrom(source);
+  if (!npc) {
+    alert("Inga NPCs att välja från ännu. Ladda data först.");
+    return;
+  }
+  openNpc(npc);
+}
+
+
 // ---------- DATA ----------
 let dataset = [];
 let view = [];
@@ -103,18 +160,6 @@ function scheduleSaveCache() {
 }
 
 // ---------- UI ----------
-function onPartyChanged() {
-  updatePartyCount({
-    countEl: document.getElementById("partyCount"),
-    subtitleEl: document.getElementById("partySubtitle"),
-  });
-
-  // uppdatera listknappar + eventuell öppen npc-modal
-  render();
-
-  // uppdatera party-modalen om den finns
-  partyView?.render?.();
-}
 
 function render() {
   const filtered = dataset.filter((n) => matchesFilters({ els, npc: n }));
@@ -148,8 +193,35 @@ function applyData(json) {
   else setStatus("No cached data. Load from OneDrive to begin.");
 }
 
-
 // ---------- WIRING ----------
+document.getElementById("btnLocalFolder")?.addEventListener("click", async () => {
+  try {
+    const rootHandle = await pickLocalRootFolder();
+
+    const { json, imageResolver: resolver } = await loadBundleFromLocalFolder({
+      rootHandle,
+      parseXlsxBuffer,
+      rowsToJson,
+      setStatus,
+    });
+
+    await saveRootHandle(rootHandle); // ✅ rätt
+
+    imageResolver = resolver;
+    saveCache(json);
+    applyData(json);
+    partyView?.setImageResolver?.(imageResolver);
+
+    setStatus(`Loaded ${json.count} NPCs from local folder ✔`);
+  } catch (e) {
+    console.error(e);
+    alert(e?.message || String(e));
+  }
+});
+
+els.randomNpc?.addEventListener("click", openRandomNpc);
+
+
 wireRelationCheckboxes({ els, onChange: render });
 
 updatePartyCount({
@@ -157,7 +229,63 @@ updatePartyCount({
   subtitleEl: document.getElementById("partySubtitle"),
 });
 
-document.getElementById("btnOneDrive")?.addEventListener("click", async () => {
+function onPartyChanged() {
+  updatePartyCount({
+    countEl: document.getElementById("partyCount"),
+    subtitleEl: document.getElementById("partySubtitle"),
+  });
+  partyView?.render?.();
+  render(); // uppdaterar Party+/In Party i listan
+}
+
+// Viktigt: panelen måste kunna sätta imageResolver + meddela partyView
+function setImageResolver(r) {
+  imageResolver = r;
+  partyView?.setImageResolver?.(r);
+
+  window.__npc = window.__npc || {};
+  window.__npc.imageResolver = r;
+}
+
+function applyDataFromJson(json) {
+  applyData(json);
+}
+
+const SKILL_KEYS = [
+  "Arts","Athletics","Ballistics","Boating","Brawl","Communication","Crafting",
+  "Culture","Domestics","Driving","Empathy","Games","Gymnastics","Insight",
+  "Knowledge","Medicine","Melee","Navigation","Observation","Performance",
+  "Piloting","Riding","Science","Stealth","Style","Survival","Technology"
+];
+
+initDataPanel({
+  getDataset: () => dataset,
+  getView: () => view,
+
+  setStatus,
+  applyDataFromJson,
+  setImageResolver,
+  onPartyChanged,
+
+  oneDrive,
+  parseXlsxBuffer,
+  rowsToJson,
+  saveCache,
+
+  clearAll: async () => {
+    clearCache();
+    await clearImageStore();
+    setImageResolver(null);
+    applyDataFromJson(null);
+    onPartyChanged();
+  },
+
+  exportNpcsToXlsx,
+  skillKeys: SKILL_KEYS,
+});
+
+
+/*document.getElementById("btnOneDrive")?.addEventListener("click", async () => {
   try {
     const url = prompt(
       "Klistra in OneDrive-länk till mappen (eller till data.xlsx):"
@@ -195,7 +323,7 @@ els.clear?.addEventListener("click", async () => {
   imageResolver = null;
   applyData(null);
 });
-
+*/
 
 [els.q, els.gender, els.origin, els.concept, els.reputation, els.sort].forEach((el) => {
   el?.addEventListener("input", render);
@@ -206,6 +334,7 @@ els.clear?.addEventListener("click", async () => {
 
 const cached = loadCache();
 applyData(cached);
+tryReconnectLocalFolder();
 
 initDiceUI();
 

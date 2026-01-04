@@ -29,13 +29,14 @@
                 View Party <span class="badge text-bg-dark" id="partyCount">0</span>
             </button>
             <div class="d-flex flex-wrap gap-2 align-items-right">
-                <button id="btnOneDrive" class="btn btn-primary">
-                    Load from OneDrive
-                </button>
-                <button id="btnLogout" class="btn btn-outline-danger" type="button">
-                    Log out
-                </button>
-                <button id="clear" class="btn btn-outline-secondary" type="button">Clear cache</button>
+            <button
+                class="btn btn-outline-primary"
+                type="button"
+                data-bs-toggle="offcanvas"
+                data-bs-target="#dataPanel"
+                aria-controls="dataPanel">
+                Data
+            </button>
             </div>
         </div>
         
@@ -145,7 +146,44 @@
             <div id="list"></div>
         </div>
     </div>
-    
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="dataPanel" aria-labelledby="dataPanelLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="dataPanelLabel">Data</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+
+    <div class="offcanvas-body">
+
+        <div class="d-grid gap-2">
+            <button id="btnLocalFolder" class="btn btn-outline-primary">
+                Local folder
+            </button>
+            <button id="btnExportXlsx" class="btn btn-outline-success" type="button">
+                Export Excel (local)
+            </button>
+
+            <hr class="my-3">
+
+            <button id="btnOneDriveLink" class="btn btn-primary" type="button">
+                OneDrive-link
+            </button>
+
+            <button id="btnLogout" class="btn btn-outline-dark" type="button">
+                Logg off Onedrive
+            </button>
+
+            <hr class="my-3">
+
+            <button id="btnClearCache" class="btn btn-outline-danger" type="button">
+                Clear cache
+            </button>
+            </div>
+
+            <div class="small text-secondary mt-3">
+        </div>
+    </div>
+    </div>
+
     <!-- NPC Modal -->
     <div class="modal fade" id="npcModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -193,7 +231,7 @@
                                     <div class="card">
                                         <div class="card-header bg-white fw-semibold">Traits</div>
                                         <div class="card-body">
-                                            <div id="traitsGrid" class="traits-grid"></div>
+                                            <div id="charsGrid" class="traits-grid"></div>
                                             <hr class="my-3">
                                             <div class="fw-semibold mb-1">Skills</div>
                                             <div class="prewrap" id="skillsBox"></div>
@@ -241,7 +279,12 @@
                         
                         <!-- right: image -->
                         <div class="col-12 col-lg-4">
-                            <img id="modalImg" class="modal-img" alt="">
+                            <div class="modal-img-wrap">
+                                <button id="modalImgPrev" type="button" class="modal-img-nav" aria-label="Previous image">‹</button>
+                                <img id="modalImg" class="modal-img" alt="">
+                                <button id="modalImgNext" type="button" class="modal-img-nav" aria-label="Next image">›</button>
+                                <div id="modalImgCount" class="modal-img-count"></div>
+                            </div>
                             <div class="text-secondary small mt-2" id="imgHint">
                                 Images load from <code>refs/&lt;Origin&gt;/&lt;Name&gt;.jpg</code> next to this HTML file.
                             </div>

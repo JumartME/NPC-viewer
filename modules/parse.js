@@ -117,7 +117,16 @@ export function rowToNpc(row) {
 // ===== XLSX buffer → rows
 export async function parseXlsxBuffer(buf) {
   const wb = XLSX.read(buf, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
+
+  // hitta Info-fliken (case-insensitive)
+  const infoName =
+    wb.SheetNames.find(n => String(n).trim().toLowerCase() === "info");
+
+  if (!infoName) {
+    throw new Error('Excel-filen saknar en flik som heter "Info".');
+  }
+
+  const ws = wb.Sheets[infoName];
   return XLSX.utils.sheet_to_json(ws, { defval: "" });
 }
 

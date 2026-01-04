@@ -2,20 +2,76 @@
 import { getImageBlob, putImageBlob } from "./imageStore.js";
 
 // Endast format du faktiskt använder
-export const IMAGE_EXTS = [".jpg", ".jpeg"];
+export const IMAGE_EXTS = [".jpg", ".jpeg", ".png"];
+
+// ===== Token helpers for multi-image matching
+function stripDiacritics(s) {
+  try {
+    return s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  } catch {
+    return s;
+  }
+}
+
+export function tokenizeForImage(s) {
+  return stripDiacritics(String(s ?? ""))
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .split(/[\s_-]+/g)
+    .filter(Boolean);
+}
+
+function stripExt(fileName) {
+  const s = String(fileName ?? "");
+  return s.replace(/\.(jpg|jpeg|png)$/i, "");
+}
+
+function startsWithTokens(haystack, needle) {
+  if (!needle?.length) return false;
+  if (!haystack || haystack.length < needle.length) return false;
+  for (let i = 0; i < needle.length; i++) {
+    if (haystack[i] !== needle[i]) return false;
+  }
+  return true;
+}
+
+// Match ALL filenames (within an Origin folder) that belong to an NPC.
+// Returns filenames sorted with "primary" first.
+export function matchImageFileNames(fileNames = [], npcName = "") {
+  const npcTokens = tokenizeForImage(npcName);
+  if (!npcTokens.length) return [];
+
+  // 1 token: match first token; >1 tokens: match full prefix
+  const needle = npcTokens.length === 1 ? [npcTokens[0]] : npcTokens;
+
+  const matches = [];
+  for (const fn of fileNames) {
+    const base = stripExt(fn);
+    const tokens = tokenizeForImage(base);
+    if (startsWithTokens(tokens, needle)) {
+      matches.push({ fileName: fn, tokens });
+    }
+  }
+
+  // primary first: shortest token count first, then filename
+  matches.sort((a, b) => {
+    const d = a.tokens.length - b.tokens.length;
+    if (d !== 0) return d;
+    return a.fileName.localeCompare(b.fileName);
+  });
+
+  return matches.map((m) => m.fileName);
+}
 
 // ===== Naming conventions (SINGLE SOURCE OF TRUTH)
 export function imageNameCandidates(fullName) {
   const s = String(fullName ?? "").trim().replace(/\s+/g, " ");
   if (!s) return [];
-
   const parts = s.split(" ");
-  const out = [];
-
-  out.push(s); // full name
+  const out = [s];
   if (parts.length >= 2) out.push(parts.slice(0, 2).join(" "));
-  out.push(parts[0]); // first name
-
+  out.push(parts[0]);
   return [...new Set(out)];
 }
 
@@ -29,79 +85,157 @@ function setObjectUrl(imgEl, blob) {
   imgEl.src = url;
 }
 
-// ===== Unified image setter (OneDrive + IndexedDB cache)
-export async function setImgForNpc({
-  imgEl,
+// ===== Resolve images for an NPC (multi-image aware)
+export async function ensureNpcImages({
   npc,
   imageResolver = null,
   onImageRefResolved = null,
-}) {
-  imgEl.classList.remove("missing");
-  imgEl.alt = npc?.Name || "";
+} = {}) {
+  if (!npc) return { images: [], primary: null };
 
-  // 0) Om NPC redan har en sparad ref: försök visa från IndexedDB direkt
-  const ref0 = npc?.imageRef;
-  if (ref0?.driveId && ref0?.itemId) {
-    const cacheKey = `${ref0.driveId}:${ref0.itemId}`;
-    const cachedBlob = await getImageBlob(cacheKey);
-    if (cachedBlob) {
-      setObjectUrl(imgEl, cachedBlob);
-      return;
-    }
-    // annars fall back till resolver (om finns)
+  if (Array.isArray(npc._images) && npc._primaryImage) {
+    return { images: npc._images, primary: npc._primaryImage };
   }
 
-  // 1) Utan resolver kan vi inte hämta nya bilder
-  const canResolve =
-    typeof imageResolver?.getNpcImageRef === "function" &&
-    typeof imageResolver?.getDownloadUrlByItemId === "function";
+  const origin = npc?.Origin || "";
+  const name = npc?.Name || "";
 
-  if (!canResolve) {
+  // === Local-folder resolver ===
+  if (imageResolver?.getNpcImageUrls && imageResolver?.kind === "local-folder") {
+    const urls = await imageResolver.getNpcImageUrls(origin, name);
+    const images = (urls || []).map((url) => ({ kind: "local", url }));
+    const primary = images[0] || null;
+    npc._images = images;
+    npc._primaryImage = primary;
+    return { images, primary };
+  }
+
+  // Back-compat local: single url
+  if (imageResolver?.getNpcImageUrl && imageResolver?.kind === "local-folder") {
+    const url = await imageResolver.getNpcImageUrl(origin, name);
+    const images = url ? [{ kind: "local", url }] : [];
+    const primary = images[0] || null;
+    npc._images = images;
+    npc._primaryImage = primary;
+    return { images, primary };
+  }
+
+  // === OneDrive resolver ===
+  const canResolveOneDrive =
+    !!imageResolver?.getDownloadUrlByItemId &&
+    (!!imageResolver?.getNpcImageRefs || !!imageResolver?.getNpcImageRef);
+
+  if (!canResolveOneDrive) {
+    npc._images = [];
+    npc._primaryImage = null;
+    return { images: [], primary: null };
+  }
+
+  // Prefer multi-ref API
+  let refs = [];
+  if (imageResolver?.getNpcImageRefs) {
+    refs = await imageResolver.getNpcImageRefs(origin, name);
+  } else {
+    // back-compat: try name candidates one-by-one
+    const names = imageNameCandidates(name);
+    for (const n of names) {
+      const ref = await imageResolver.getNpcImageRef(origin, n);
+      if (ref?.driveId && ref?.itemId) {
+        refs = [ref];
+        break;
+      }
+    }
+  }
+
+  const images = (refs || [])
+    .filter((r) => r?.driveId && r?.itemId)
+    .map((r) => ({
+      kind: "onedrive",
+      driveId: r.driveId,
+      itemId: r.itemId,
+      fileName: r.fileName || "",
+    }));
+
+  const primary = images[0] || null;
+  npc._images = images;
+  npc._primaryImage = primary;
+
+  // Keep old single imageRef for export/backwards compatibility (primary only)
+  if (primary?.kind === "onedrive") {
+    npc.imageRef = { driveId: primary.driveId, itemId: primary.itemId };
+    onImageRefResolved?.(npc);
+  }
+
+  return { images, primary };
+}
+
+export async function setImgForImageEntry({
+  imgEl,
+  entry,
+  imageResolver = null,
+} = {}) {
+  imgEl.classList.remove("missing");
+
+  if (!entry) {
     imgEl.removeAttribute("src");
     imgEl.classList.add("missing");
     return;
   }
 
-  // 2) Resolver finns: hitta ref (driveId+itemId), cachea blob, spara ref på npc
-  const origin = npc?.Origin || "";
-  const names = imageNameCandidates(npc?.Name);
-
-  for (const name of names) {
-    try {
-      const ref = await imageResolver.getNpcImageRef(origin, name);
-      if (!ref?.driveId || !ref?.itemId) continue;
-
-      // Spara ref på NPC (så den kan cachas i localStorage)
-      npc.imageRef = { driveId: ref.driveId, itemId: ref.itemId };
-      if (typeof onImageRefResolved === "function") onImageRefResolved(npc);
-
-      const cacheKey = `${ref.driveId}:${ref.itemId}`;
-
-      // 2a) Har vi blob redan?
-      const cachedBlob = await getImageBlob(cacheKey);
-      if (cachedBlob) {
-        setObjectUrl(imgEl, cachedBlob);
-        return;
-      }
-
-      // 2b) Hämta blob och lägg i IndexedDB
-      const url = await imageResolver.getDownloadUrlByItemId(ref.itemId);
-      if (!url) continue;
-
-      const res = await fetch(url);
-      if (!res.ok) continue;
-
-      const blob = await res.blob();
-      await putImageBlob(cacheKey, blob);
-
-      setObjectUrl(imgEl, blob);
-      return;
-    } catch {
-      // prova nästa kandidat
-    }
+  // Local url
+  if (entry.kind === "local") {
+    imgEl.src = entry.url;
+    return;
   }
 
-  // Ingen bild hittades
+  // OneDrive item -> IndexedDB cached blob -> downloadUrl -> fetch -> cache
+  if (entry.kind === "onedrive") {
+    const cacheKey = `${entry.driveId}:${entry.itemId}`;
+
+    const cachedBlob = await getImageBlob(cacheKey);
+    if (cachedBlob) {
+      setObjectUrl(imgEl, cachedBlob);
+      return;
+    }
+
+    if (!imageResolver?.getDownloadUrlByItemId) {
+      imgEl.removeAttribute("src");
+      imgEl.classList.add("missing");
+      return;
+    }
+
+    const url = await imageResolver.getDownloadUrlByItemId(entry.itemId);
+    if (!url) {
+      imgEl.removeAttribute("src");
+      imgEl.classList.add("missing");
+      return;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      imgEl.removeAttribute("src");
+      imgEl.classList.add("missing");
+      return;
+    }
+
+    const blob = await res.blob();
+    await putImageBlob(cacheKey, blob);
+    setObjectUrl(imgEl, blob);
+    return;
+  }
+
   imgEl.removeAttribute("src");
   imgEl.classList.add("missing");
+}
+
+// Backwards-compatible: sets PRIMARY image for an NPC
+export async function setImgForNpc({
+  imgEl,
+  npc,
+  imageResolver = null,
+  onImageRefResolved = null,
+} = {}) {
+  imgEl.alt = npc?.Name || "";
+  const { primary } = await ensureNpcImages({ npc, imageResolver, onImageRefResolved });
+  await setImgForImageEntry({ imgEl, entry: primary, imageResolver });
 }

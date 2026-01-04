@@ -89,6 +89,22 @@
     /* equal height feel */
     min-height: 128px;                    /* tweak as you like */
 }
+/* Se till att bildens förälder klipper allt som sticker ut */
+.npc-card .img-wrap, 
+.npc-card .npc-img-wrap,
+.npc-card .img-container {
+  overflow: hidden;
+}
+
+/* Själva bilden */
+.npc-card img,
+.npc-card .npc-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  max-width: 200%;
+}
 
 .thumb {
     grid-column: 1;
@@ -235,4 +251,37 @@
 
 .party-remove-btn:hover {
   background: #dc3545; /* bootstrap danger */
+}
+
+.modal-img-wrap { position: relative; }
+
+.modal-img-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(0,0,0,.15);
+    background: rgba(255,255,255,.85);
+    font-size: 24px;
+    line-height: 38px;
+    padding: 0;
+    cursor: pointer;
+}
+.modal-img-nav:hover { background: rgba(255,255,255,.95); }
+.modal-img-nav:disabled { opacity: .35; cursor: default; }
+
+#modalImgPrev { left: 10px; }
+#modalImgNext { right: 10px; }
+
+.modal-img-count {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    padding: .15rem .45rem;
+    border-radius: .5rem;
+    font-size: .8rem;
+    background: rgba(0,0,0,.6);
+    color: white;
 }

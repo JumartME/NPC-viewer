@@ -1,4 +1,5 @@
 // modules/action.js
+
 const CHARACTERISTICS = [
   "Intelligence","Perception","Will","Wits",
   "Agility","Dexterity","Stamina","Strength",
@@ -28,12 +29,14 @@ export function initActionUI() {
     actResult: qs("actResult"),
   };
 
+  // Om UI saknas (t.ex. HTML ändras), krascha inte.
+  if (!els.actChar || !els.actSkill || !els.actRoll || !els.actResult) {
+    return { setNpc: () => {}, refresh: () => {} };
+  }
+
   let currentNpc = null;
 
-  function setNpc(n) {
-    currentNpc = n;
-
-    // Characteristics
+  function buildCharOptions(n) {
     els.actChar.innerHTML = "";
     for (const k of CHARACTERISTICS) {
       const opt = document.createElement("option");
@@ -41,9 +44,11 @@ export function initActionUI() {
       opt.textContent = `${k} (${toNumber(n?.[k])})`;
       els.actChar.appendChild(opt);
     }
+  }
 
-    // Skills (from fields -> npc.skills)
+  function buildSkillOptions(n) {
     els.actSkill.innerHTML = "";
+
     const skills = (n?.skills && typeof n.skills === "object") ? n.skills : {};
     const keys = Object.keys(skills).sort((a,b)=>a.localeCompare(b));
 
@@ -54,16 +59,39 @@ export function initActionUI() {
       opt.disabled = true;
       opt.selected = true;
       els.actSkill.appendChild(opt);
-    } else {
-      for (const sk of keys) {
-        const opt = document.createElement("option");
-        opt.value = sk;
-        opt.textContent = `${sk} (${skills[sk]})`;
-        els.actSkill.appendChild(opt);
-      }
+      return;
     }
 
+    for (const sk of keys) {
+      const opt = document.createElement("option");
+      opt.value = sk;
+      opt.textContent = `${sk} (${toNumber(skills[sk])})`;
+      els.actSkill.appendChild(opt);
+    }
+  }
+
+  function setNpc(n) {
+    currentNpc = n;
+
+    buildCharOptions(currentNpc);
+    buildSkillOptions(currentNpc);
+
     els.actResult.innerHTML = `<span class="text-secondary">Choose values and roll.</span>`;
+  }
+
+  // Bygg om dropdowns från currentNpc (kalla när NPC editeras i modalen)
+  function refresh() {
+    if (!currentNpc) return;
+
+    const prevChar = els.actChar.value;
+    const prevSkill = els.actSkill.value;
+
+    buildCharOptions(currentNpc);
+    buildSkillOptions(currentNpc);
+
+    // försök behålla val
+    if (prevChar) els.actChar.value = prevChar;
+    if (prevSkill) els.actSkill.value = prevSkill;
   }
 
   function runActionRoll() {
@@ -99,7 +127,7 @@ export function initActionUI() {
     `;
   }
 
-  els.actRoll?.addEventListener("click", runActionRoll);
+  els.actRoll.addEventListener("click", runActionRoll);
 
-  return { setNpc };
+  return { setNpc, refresh };
 }
