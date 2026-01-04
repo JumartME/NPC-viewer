@@ -358,3 +358,11 @@ export async function setImgForNpc({
   const { primary } = await ensureNpcImages({ npc, imageResolver, onImageRefResolved });
   await setImgForImageEntry({ imgEl, entry: primary, imageResolver });
 }
+
+export async function loadNpcPrimaryIntoImg({ imgEl, npc, imageResolver, onImageRefResolved }) {
+  // Förhindra dubbel-laddning
+  if (imgEl.dataset.imgLoaded === "1") return;
+  imgEl.dataset.imgLoaded = "1";
+
+  await setImgForNpc({ imgEl, npc, imageResolver, onImageRefResolved });
+}
