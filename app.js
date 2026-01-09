@@ -1,7 +1,6 @@
 // app.js
 import { createOneDriveClient } from "./OneDrive/onedrive.js";
 import { saveRootHandle, loadRootHandle, ensureHandlePermission } from "./modules/fsHandleStore.js";
-
 import {
   parseXlsxBuffer,
   rowsToJson,
@@ -56,30 +55,40 @@ const oneDrive = createOneDriveClient({
 // set after OneDrive load
 let imageResolver = null;
 
-async function tryReconnectLocalFolder() {
+async function tryReconnectLocalFolderAndReloadExcel() {
   try {
     const rootHandle = await loadRootHandle();
     if (!rootHandle) return false;
 
+    // Kräver ofta att användaren redan gett permission tidigare
     const ok = await ensureHandlePermission(rootHandle, "read");
     if (!ok) return false;
 
-    const { imageResolver: resolver } = await loadBundleFromLocalFolder({
+    setStatus("Reloading local data.xlsx...");
+
+    // ✅ Läs om Excel + bygg imageResolver igen
+    const { json, imageResolver: resolver } = await loadBundleFromLocalFolder({
       rootHandle,
       parseXlsxBuffer,
       rowsToJson,
       setStatus,
     });
 
+    // Sätt resolver + data
     setImageResolver(resolver);
-    render();
-    setStatus("Reconnected local folder images ✔");
+    saveCache(json);
+    applyData(json);
+    partyView?.setImageResolver?.(resolver);
+    onPartyChanged?.();
+
+    setStatus(`Reloaded ${json.count} NPCs from local folder ✔`);
     return true;
   } catch (e) {
-    console.warn("Local folder reconnect failed:", e);
+    console.warn("Local folder reload failed:", e);
     return false;
   }
 }
+
 
 
 function openNpc(npc) {
@@ -334,7 +343,7 @@ els.clear?.addEventListener("click", async () => {
 
 const cached = loadCache();
 applyData(cached);
-tryReconnectLocalFolder();
+tryReconnectLocalFolderAndReloadExcel();
 
 initDiceUI();
 
