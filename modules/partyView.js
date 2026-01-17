@@ -1,9 +1,8 @@
 // modules/partyView.js
-// Ansvar: Party-modal vy (grid + remove) + Saved Parties (localStorage)
+// Party-modal vy (grid + remove) + Saved Parties (localStorage)
 
 import { loadPartyIds, removeFromParty, getCurrentPartyIds, addToParty } from "./party.js";
 import { setImgForNpc } from "./images.js";
-
 import { getParties, saveParty, deleteParty, getParty } from "./partiesStore.js";
 
 export function initPartyView({
@@ -12,23 +11,25 @@ export function initPartyView({
   gridId = "partyGrid",
   clearBtnId = "clearParty",
 
-  onOpenNpc = null,          // function(npc)
-  getNpcById = null,         // function(id) -> npc
-  imageResolver = null,      // kan bytas via setter
-  clearPartyAllFn = null,    // inject (från app.js)
-  onPartyChanged = null,     // callback när party ändras
+  onOpenNpc = null,
+  getNpcById = null,
+  imageResolver = null,
+  clearPartyAllFn = null,
+  onPartyChanged = null,
 } = {}) {
   const viewBtn = document.getElementById(viewBtnId);
   const modalEl = document.getElementById(modalId);
   const grid = document.getElementById(gridId);
   const clearBtn = document.getElementById(clearBtnId);
 
-  // Saved parties UI (måste finnas i din partyModal HTML)
+  // Header UI (ska finnas i HTML)
   const savedSel = document.getElementById("savedParties");
-  const nameInput = document.getElementById("partyName");
   const saveBtn = document.getElementById("saveParty");
   const loadBtn = document.getElementById("loadParty");
   const deleteBtn = document.getElementById("deleteParty");
+
+  const titleEl = document.getElementById("partyTitle");
+  const subtitleEl = document.getElementById("partySubtitle");
 
   if (!viewBtn || !modalEl || !grid) {
     return { show: () => {}, render: () => {}, setImageResolver: () => {} };
@@ -37,8 +38,35 @@ export function initPartyView({
   let modal = null;
   let resolver = imageResolver;
 
-  function setImageResolver(r) {
-    resolver = r;
+  // Kom ihåg vilken saved party som är aktiv (för titel)
+  let activeSavedPartyId = "";
+
+  function setImageResolver(r) { resolver = r; }
+
+  function setTitle(name, count) {
+    if (titleEl) titleEl.textContent = name || "Party";
+    if (subtitleEl) subtitleEl.textContent = (typeof count === "number") ? `${count} members` : "";
+  }
+
+  function renderSavedParties() {
+    if (!savedSel) return;
+
+    const parties = getParties();
+    savedSel.innerHTML = "";
+
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "— Saved parties —";
+    savedSel.appendChild(empty);
+
+    parties.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.npcIds.length})`;
+      savedSel.appendChild(opt);
+    });
+
+    savedSel.value = activeSavedPartyId || "";
   }
 
   function render() {
@@ -46,6 +74,14 @@ export function initPartyView({
 
     const ids = loadPartyIds();
     grid.innerHTML = "";
+
+    // Titel: om en saved party är vald -> visa dess namn, annars "Current party"
+    if (activeSavedPartyId) {
+      const p = getParty(activeSavedPartyId);
+      setTitle(p?.name || "Party", ids.length);
+    } else {
+      setTitle("Current party", ids.length);
+    }
 
     ids.forEach((id) => {
       const npc = getNpcById(id);
@@ -65,7 +101,6 @@ export function initPartyView({
       name.className = "party-name";
       name.textContent = npc.Name;
 
-      // X-knapp istället för checkbox
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "party-remove-btn";
@@ -94,8 +129,8 @@ export function initPartyView({
 
   function show() {
     modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    renderSavedParties();
     render();
-    if (savedSel) renderSavedParties(savedSel);
     modal.show();
   }
 
@@ -104,27 +139,10 @@ export function initPartyView({
   if (clearBtn && clearPartyAllFn) {
     clearBtn.addEventListener("click", () => {
       clearPartyAllFn();
+      activeSavedPartyId = "";          // när du clearar, gå tillbaka till current party
       onPartyChanged?.();
+      renderSavedParties();
       render();
-    });
-  }
-
-  // ===== Saved Parties =====
-
-  function renderSavedParties(selectEl) {
-    const parties = getParties();
-    selectEl.innerHTML = "";
-
-    const empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = "— Saved parties —";
-    selectEl.appendChild(empty);
-
-    parties.forEach((p) => {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = `${p.name} (${p.npcIds.length})`;
-      selectEl.appendChild(opt);
     });
   }
 
@@ -135,51 +153,58 @@ export function initPartyView({
       return;
     }
 
-    const name = (nameInput?.value || "").trim() || "Unnamed party";
+    const name = prompt("Party name:", "Unnamed party")?.trim();
+    if (!name) return;
 
-    saveParty({
+    const saved = saveParty({
       id: crypto.randomUUID(),
       name,
       npcIds,
     });
 
-    if (savedSel) renderSavedParties(savedSel);
+    activeSavedPartyId = saved.id;
+    renderSavedParties();
+    render();
   }
 
-  function loadPartyById(partyId) {
-    const party = getParty(partyId);
+  function loadSelectedParty() {
+    const id = savedSel?.value || "";
+    if (!id) return;
+
+    const party = getParty(id);
     if (!party) return;
 
     clearPartyAllFn?.();
     party.npcIds.forEach(addToParty);
+
+    activeSavedPartyId = id;
     onPartyChanged?.();
+    renderSavedParties();
     render();
   }
 
-  function deleteSelectedParty(partyId) {
-    if (!partyId) return;
-    deleteParty(partyId);
-    if (savedSel) {
-      renderSavedParties(savedSel);
-      savedSel.value = "";
-    }
+  function deleteSelectedParty() {
+    const id = savedSel?.value || "";
+    if (!id) return;
+
+    if (!confirm("Delete this saved party?")) return;
+
+    deleteParty(id);
+
+    if (activeSavedPartyId === id) activeSavedPartyId = "";
+    renderSavedParties();
+    render();
   }
 
-  // Wiring (bara om UI finns)
-  saveBtn?.addEventListener("click", () => {
-    saveCurrentParty();
-  });
+  // Wiring
+  saveBtn?.addEventListener("click", saveCurrentParty);
+  loadBtn?.addEventListener("click", loadSelectedParty);
+  deleteBtn?.addEventListener("click", deleteSelectedParty);
 
-  loadBtn?.addEventListener("click", () => {
-    const id = savedSel?.value || "";
-    if (!id) return;
-    loadPartyById(id);
-  });
-
-  deleteBtn?.addEventListener("click", () => {
-    const id = savedSel?.value || "";
-    if (!id) return;
-    deleteSelectedParty(id);
+  // Om användaren byter dropdown: bara byt titel, ladda inte direkt
+  savedSel?.addEventListener("change", () => {
+    activeSavedPartyId = savedSel.value || "";
+    render();
   });
 
   return { show, render, setImageResolver };

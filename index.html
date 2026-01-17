@@ -319,24 +319,22 @@
                 </div>
                 <div class="modal-body">
                     <div class="d-flex align-items-end justify-content-between gap-2 mb-2">
-                        <div class="flex-grow-1">
-                            <label class="form-label small mb-1" for="savedParties">Saved parties</label>
-                            <select id="savedParties" class="form-select form-select-sm"></select>
-                        </div>
+                    <div class="flex-grow-1">
+                        <label class="form-label small mb-1" for="savedParties">Saved parties</label>
+                        <select id="savedParties" class="form-select form-select-sm"></select>
+                    </div>
 
-                        <div class="d-flex gap-2 ms-auto">
+                    <div class="d-flex gap-2 ms-auto">
+                        <button id="saveParty" type="button" class="btn btn-sm btn-primary">Save</button>
+                        <button id="loadParty" type="button" class="btn btn-sm btn-outline-primary">Load</button>
+                        <button id="deleteParty" type="button" class="btn btn-sm btn-outline-danger">Delete</button>
+                    </div>
+                    </div>
 
-                            <button id="loadParty" type="button" class="btn btn-sm btn-outline-primary">Load</button>
-                            <button id="deleteParty" type="button" class="btn btn-sm btn-outline-danger">Delete</button>
-                            <input id="partyName" class="small mb-1 form-control form-control-sm" placeholder="Party name">
-                            <button id="saveParty" type="button" class="btn btn-sm btn-primary">Save</button>
-
-                        </div>
-
-                        </div>
-
-                        <!-- Active party name -->
-                        <div class="mb-2">
+                    <!-- Active party name -->
+                    <div class="mb-2">
+                    <div class="fw-semibold" id="partyTitle">Party</div>
+                    <div class="text-secondary small" id="partySubtitle"></div>
                     </div>
 
                     <div class="row g-3" id="partyGrid"></div>
