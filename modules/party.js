@@ -40,6 +40,10 @@ export function clearPartyAll() {
   savePartyIds([]);
 }
 
+export function getCurrentPartyIds() {
+  return loadPartyIds();
+}
+
 // ---- UI helper (ren, inga DOM-refs hårdkodade)
 export function updatePartyCount({ countEl, subtitleEl } = {}) {
   const ids = loadPartyIds();
