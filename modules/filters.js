@@ -33,7 +33,7 @@ export function initFiltersUI({ els, dataset }) {
   setOptions(els.reputation, ["Hostile", "Friendly", "Neutral", "Player"], "All Reputation");
   setOptions(els.concept, uniqueSorted(dataset.map((n) => n.Concept)), "All Concepts");
   setOptions(els.gender, uniqueSorted(dataset.map((n) => n.Gender)), "All Genders");
-
+  setOptions(els.group, uniqueSorted(dataset.map(n => n.Group)), "All Groups");
   // sort options
   if (els.sort) {
     els.sort.innerHTML = "";
@@ -67,25 +67,23 @@ function repRank(n) {
 }
 
 export function matchesFilters({ els, npc }) {
+  // Använd BARA npc (ingen n-variabel alls)
   const q = (els.q?.value || "").trim().toLowerCase();
   const origin = els.origin?.value || "";
-  const rep = els.reputation?.value || "";
   const concept = els.concept?.value || "";
+  const reputation = els.reputation?.value || "";
   const gender = els.gender?.value || "";
+  const group = els.group?.value || "";
 
   if (q && !String(npc.Name || "").toLowerCase().includes(q)) return false;
   if (origin && npc.Origin !== origin) return false;
-  if (rep && npc.Reputation !== rep) return false;
   if (concept && npc.Concept !== concept) return false;
+  if (reputation && npc.Reputation !== reputation) return false;
   if (gender && npc.Gender !== gender) return false;
+  if (group && npc.Group !== group) return false;
 
-  // relation checkboxes
-  if (els.relAll && !els.relAll.checked) {
-    const selected =
-      (els.relationCbs || [])
-        .filter((cb) => cb.checked)
-        .map((cb) => cb.value);
-
+  if (els.relAll && els.relationCbs && !els.relAll.checked) {
+    const selected = els.relationCbs.filter(cb => cb.checked).map(cb => cb.value);
     if (selected.length > 0 && !selected.includes(npc.Relation)) return false;
   }
 

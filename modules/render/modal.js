@@ -106,6 +106,7 @@ export function openNpcModal({
     ["Species", npc.Species],
     ["Origin", npc.Origin],
     ["Concept", npc.Concept],
+    ["Group", npc.Group],
   ]);
 
   // Vitals / Combat / Gear (som innan)

@@ -34,7 +34,7 @@ function isSeparatorRow(row) {
   if (!name) return false;
 
   const fieldsToCheck = [
-    "Gender","Age","Species","Concept","Description","Origin",
+    "Gender","Age","Species","Concept","Description","Origin","Group",
     "Equipment","Armor","Shield","Weapon","Magic","Special",
     "Healing","Agility","Strength","Dexterity","Stamina","Intelligence",
     "Perception","Will","Wits","Expression","Instinct","Presence","Wisdom",
@@ -81,6 +81,7 @@ export function rowToNpc(row) {
     Species: clean(row.Species),
     Concept: clean(row.Concept),
     Description: clean(row.Description),
+    Group: clean(row.Group),
 
     Equipment: clean(row.Equipment),
     Armor: clean(row.Armor),

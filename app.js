@@ -126,6 +126,7 @@ const els = {
   relAll: document.getElementById("relAll"),
   relationCbs: Array.from(document.querySelectorAll(".rel-cb")),
   sort: document.getElementById("sort"),
+  group: document.getElementById("group"),
 };
 
 function setStatus(msg) {
@@ -334,7 +335,7 @@ els.clear?.addEventListener("click", async () => {
 });
 */
 
-[els.q, els.gender, els.origin, els.concept, els.reputation, els.sort].forEach((el) => {
+[els.q, els.gender, els.origin, els.concept, els.reputation, els.group, els.sort].forEach((el) => {
   el?.addEventListener("input", render);
   el?.addEventListener("change", render);
 });
