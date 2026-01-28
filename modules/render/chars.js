@@ -2,9 +2,10 @@
 import { toNumber } from "./dom.js";
 
 export const CHARACTERISTICS = [
-  "Intelligence","Perception","Will","Wits",
-  "Agility","Dexterity","Stamina","Strength",
-  "Expression","Instinct","Presence","Wisdom"
+  "Intelligence","Agility","Expression",
+  "Perception","Dexterity","Instinct",
+  "Will","Stamina","Presence",
+  "Wits","Strength","Wisdom"
 ];
 
 export function renderCharsGrid(container, npc, onNpcChanged) {
