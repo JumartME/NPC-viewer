@@ -50,16 +50,42 @@
 .party-remove input { margin-right: .35rem; }
 
 /* Replace list-group layout with a responsive grid of cards */
+/* Listan blir en responsiv grid */
 #list {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: .5rem;
+  display: grid;
+  gap: 0.75rem;
+
+  /* Mobil först: 1–2 kolumner beroende på bredd */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-#list { display:grid; grid-template-columns:1fr; gap:.5rem; }
-@media (min-width: 768px) { #list { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1200px){ #list { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1600px){ #list { grid-template-columns: repeat(4, 1fr); } }
+/* Små mobiler: 1 kolumn */
+@media (max-width: 420px) {
+  #list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tablet / liten laptop: 3 kolumner */
+@media (min-width: 768px) {
+  #list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Desktop: 4 kolumner */
+@media (min-width: 1200px) {
+  #list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Stor desktop / TV: 6 kolumner */
+@media (min-width: 1800px) {
+  #list {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
 
 /* Make each item look like a card */
 #list .npc-card {
@@ -77,18 +103,25 @@
 }
 
 .npc-card {
-    display: grid;
-    grid-template-columns: 76px 1fr auto; /* image | text | button */
-    grid-template-rows: auto auto;        /* top content | pills */
-    gap: .5rem .5rem;                     /* row gap, col gap */
-    padding: .5rem;                       /* tighter padding */
-    border-radius: .75rem;
-    border: 1px solid rgba(0,0,0,.12);
-    background: #fff;
-    
-    /* equal height feel */
-    min-height: 128px;                    /* tweak as you like */
+  display: grid;
+  grid-template-columns: 64px 1fr auto; /* bild, text, party-knapp */
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  background: white;
 }
+
+/* Thumbnail */
+.npc-card .thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+
 /* Se till att bildens förälder klipper allt som sticker ut */
 .npc-card .img-wrap, 
 .npc-card .npc-img-wrap,
@@ -107,22 +140,23 @@
 }
 
 .thumb {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-    height: 100%;
-    width: 80px;
-    border-radius: .6rem;
-    background: #f1f3f5;
-    border: 1px solid rgba(0,0,0,.10);
-    /* remove extra flex sizing */
-    overflow:hidden;
-}    
+  width: 80px;
+  height: 80px;            /* eller t.ex. 96px om du vill lite högre */
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #eee;
+}
 
-.thumb .img {
-    height:200%;
-    width: 100%;
-    object-fit: cover;
-    object-position: 50% 0%;   /* 👈 fokus uppåt = “thigh-up” */
+.thumb img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;       /* fyll rutan, klipp överskott */
+  object-position: center 0%;
+  /* ↑ horisontellt centrerad
+     ↑ vertikalt mot toppen (20% ≈ visa översta ~60%) */
+
+  display: block;
 }
 
 .npc-top {
