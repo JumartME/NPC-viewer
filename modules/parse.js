@@ -79,6 +79,7 @@ export function rowToNpc(row) {
     Gender: clean(row.Gender),
     Age: clean(row.Age),
     Species: clean(row.Species),
+    Heritage: clean(row.Heritage),
     Concept: clean(row.Concept),
     Description: clean(row.Description),
     Group: clean(row.Group),

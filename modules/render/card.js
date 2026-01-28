@@ -38,7 +38,7 @@ export function buildRow({ npc, index, imageResolver, onOpenModal, onImageRefRes
 
   const meta = document.createElement("div");
   meta.className = "npc-meta";
-  meta.textContent = [npc.Species, npc.Description].filter(Boolean).join(" • ");
+  meta.textContent = [npc.Origin, npc.Heritage].filter(Boolean).join(" • ");
 
   mid.appendChild(name);
   if (meta.textContent) mid.appendChild(meta);
