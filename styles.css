@@ -115,8 +115,7 @@
 
 /* Thumbnail */
 .npc-card .thumb {
-  width: 64px;
-  height: 64px;
+  width: 80px;
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -141,7 +140,7 @@
 
 .thumb {
   width: 80px;
-  height: 80px;            /* eller t.ex. 96px om du vill lite högre */
+  height: 96px;            /* eller t.ex. 96px om du vill lite högre */
   overflow: hidden;
   border-radius: 0.5rem;
   background: #eee;
