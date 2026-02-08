@@ -1,15 +1,33 @@
 // modules/render/card.js
-import { setImgForNpc } from "../images.js";
 import { inParty, addToParty } from "../party.js";
+
+function clean(v){
+  return String(v ?? "").trim();
+}
+
+function buildMetaText(npc){
+  const lines = [];
+
+  const line1 = [npc.Species, npc.Concept].filter(Boolean).join(" • ");
+  if (line1) lines.push(line1);
+
+  if (npc.Origin) lines.push(npc.Origin);
+
+  if (npc.Description) {
+    lines.push(npc.Description);
+  }
+
+  return lines.join("\n"); // CSS: white-space: pre-line
+}
 
 export function buildRow({
   npc,
   index,
-  imageResolver,
+  imageResolver,          // används av observern
   onOpenModal,
   onImageRefResolved,
   onPartyChanged,
-  observer
+  observer,
 }) {
   const card = document.createElement("div");
   card.className = "npc-card npc-row";
@@ -21,10 +39,9 @@ export function buildRow({
   thumb.className = "thumb";
 
   const img = document.createElement("img");
-  img.className = "img";
+  img.className = "img missing";
   img.alt = npc.Name;
   img.loading = "lazy";
-  img.classList.add("missing");
 
   // lazy-load binding
   img.__npc = npc;
@@ -33,7 +50,18 @@ export function buildRow({
 
   thumb.appendChild(img);
 
-  /* ---------- Party button (MÅSTE SKAPAS FÖRE body.appendChild) ---------- */
+  /* ---------- Body ---------- */
+  const body = document.createElement("div");
+  body.className = "npc-body";
+
+  const name = document.createElement("div");
+  name.className = "npc-name";
+  name.textContent = npc.Name;
+
+  const meta = document.createElement("div");
+  meta.className = "npc-meta";
+  meta.textContent = buildMetaText(npc);
+
   const partyBtn = document.createElement("button");
   partyBtn.type = "button";
 
@@ -47,34 +75,25 @@ export function buildRow({
 
   partyBtn.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (inParty(npc.id)) return;
+
     addToParty(npc.id);
+
     partyBtn.textContent = "In Party";
     partyBtn.disabled = true;
     partyBtn.className = "btn btn-sm party-btn btn-outline-secondary";
+
     onPartyChanged?.();
   });
 
-  /* ---------- Body (name + meta + button) ---------- */
-  const body = document.createElement("div");
-  body.className = "npc-body";
-
-  const name = document.createElement("div");
-  name.className = "npc-name";
-  name.textContent = npc.Name;
-
-  const meta = document.createElement("div");
-  meta.className = "npc-meta";
-  meta.textContent = [npc.Origin, npc.Heritage].filter(Boolean).join(" • ");
-
   body.appendChild(name);
-  if (meta.textContent) body.appendChild(meta);
+  body.appendChild(meta);
   body.appendChild(partyBtn);
 
   /* ---------- Assemble ---------- */
   card.appendChild(thumb);
   card.appendChild(body);
 
-  /* ---------- Open modal ---------- */
   card.addEventListener("click", () => onOpenModal(index));
   card.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {

@@ -14,6 +14,9 @@
 .kv .row:last-child { border-bottom: 0; }
 .prewrap { white-space: pre-wrap; }
 
+.npc-card .npc-meta{
+  white-space: pre-line;
+}
 
 .party-tile {
     position: relative;
@@ -51,81 +54,119 @@
 
 /* Replace list-group layout with a responsive grid of cards */
 /* Listan blir en responsiv grid */
-#list {
+/* ========= LIST GRID (responsivt antal kort) ========= */
+#list{
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   align-items: stretch;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
 }
 
-/* Kort: 2 kolumner, fast höjd */
-.npc-card {
+@media (min-width: 576px){
+  #list{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 992px){
+  #list{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1200px){
+  #list{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1920px){
+  #list{ grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* ========= NPC CARD ========= */
+:root{
+  --card-h: 132px;     /* justera vid behov */
+  --thumb-w: 80px;    /* vänsterbildens bredd */
+  --thumb-h: 100%;     /* fyll kortets höjd */
+  --card-pad: 12px;
+  --gap: 14px;
+}
+
+.npc-card{
   display: grid;
-  grid-template-columns: 80px 1fr;
-  gap: 12px;
+  grid-template-columns: var(--thumb-w) 1fr;
+  gap: var(--gap);
 
-  height: 108px;
-  padding: 10px;
+  height: var(--card-h);
+  padding: var(--card-pad);
+  border-radius: 14px;
+  overflow: hidden;
+
+  border: 1px solid rgba(0,0,0,.12);
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
+
+.npc-row{ cursor: pointer; }
+
+/* Thumbnail viewport: top-align, crop botten först */
+.npc-card .thumb{
+  width: var(--thumb-w);
+  height: calc(var(--card-h) - (var(--card-pad) * 2));
+  overflow: hidden;
   border-radius: 12px;
-  overflow: hidden;
+  background: #f1f3f5;
+  align-self: start;
 }
 
-/* Thumbnail: 80px bred, klipp */
-.npc-card .thumb {
-  width: 80px;
-  height: 80px;
-  overflow: hidden;
-  border-radius: 10px;
-  align-self: center;
-}
-
-.npc-card .thumb .img {
+.npc-card .thumb .img{
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 20%; /* “översta ~60%” */
+  height: 200%;
   display: block;
+  object-fit: cover;
+  object-position: 50% 0%; /* TOPPEN i överkant => kapar botten */
 }
 
-/* Högerkolumn: namn, meta, knapp längst ner */
-.npc-card .npc-body {
+/* Missing-state (du sätter .missing på img) */
+.npc-card .thumb{ position: relative; }
+.npc-card .thumb .img.missing{ opacity: 0; }
+.npc-card .thumb::after{
+  content: "No img";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #6c757d;
+  opacity: 0;
+  pointer-events: none;
+}
+.npc-card .thumb:has(.img.missing)::after{ opacity: 1; }
+
+/* Högerdel: NAME överst, meta i mitten, knapp nere höger */
+.npc-card .npc-body{
   display: grid;
   grid-template-rows: auto 1fr auto;
-  min-width: 0; /* viktigt för ellipsis */
+  min-width: 0;
 }
 
-.npc-card .npc-name {
-  font-weight: 700;
+.npc-card .npc-name{
+  font-weight: 800;
+  font-size: 1.05rem;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.npc-card .npc-meta {
+.npc-card .npc-meta{
+  margin-top: 4px;
   color: #6c757d;
+  font-size: .9rem;
   overflow: hidden;
+
+  /* 2–3 rader, sen ... */
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
-.npc-card .party-btn {
+.npc-card .party-btn{
   justify-self: end;
   align-self: end;
-}
-
-.npc-pills-left, .npc-pills-right {
-    display: flex;
-    gap: .4rem;
-    flex-wrap: wrap;
-    align-items: center;
-}
-
-.party-btn {
-    grid-column: 3;
-    grid-row: 1;
-    align-self: start;
-    white-space: nowrap;
+  white-space: nowrap;
 }
 
 
