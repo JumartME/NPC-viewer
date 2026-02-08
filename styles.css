@@ -59,20 +59,34 @@
   display: grid;
   gap: 12px;
   align-items: stretch;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
+
+  /* default (mobilt) */
+  grid-template-columns: 1fr;
 }
 
+/* >= 576px: 2 kort */
 @media (min-width: 576px){
   #list{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* >= 992px: 3 kort */
 @media (min-width: 992px){
   #list{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* >= 1200px: 4 kort (din “bra formaterade” nivå) */
 @media (min-width: 1200px){
   #list{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-@media (min-width: 1920px){
+
+/* >= 1800px: 5 kort (valfritt) */
+@media (min-width: 1800px){
   #list{ grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* >= 2200px: 6 kort (TV/4K) */
+@media (min-width: 2200px){
+  #list{ grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 /* ========= NPC CARD ========= */
