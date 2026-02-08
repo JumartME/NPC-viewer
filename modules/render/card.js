@@ -8,10 +8,8 @@ function clean(v){
 function buildMetaText(npc){
   const lines = [];
 
-  const line1 = [npc.Species, npc.Concept].filter(Boolean).join(" • ");
+  const line1 = [npc.Heritage, npc.Concept,"from", npc.Origin].filter(Boolean).join(" ");
   if (line1) lines.push(line1);
-
-  if (npc.Origin) lines.push(npc.Origin);
 
   if (npc.Description) {
     lines.push(npc.Description);
