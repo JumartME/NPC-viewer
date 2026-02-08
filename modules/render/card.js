@@ -13,10 +13,6 @@ function buildMetaText(npc){
 
   if (npc.Origin) lines.push(npc.Origin);
 
-  if (npc.Description) {
-    lines.push(npc.Description);
-  }
-
   return lines.join("\n"); // CSS: white-space: pre-line
 }
 
