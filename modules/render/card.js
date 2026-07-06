@@ -11,7 +11,7 @@ function buildMetaText(npc){
   const line1 = [npc.Heritage, npc.Concept].filter(Boolean).join(" ");
   if (line1) lines.push(line1);
 
-  if (npc.Origin) lines.push(npc.Origin);
+  if (npc.Group) lines.push(npc.Group);
 
   return lines.join("\n"); // CSS: white-space: pre-line
 }
