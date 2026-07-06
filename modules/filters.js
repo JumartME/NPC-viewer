@@ -31,7 +31,6 @@ export function initFiltersUI({ els, dataset }) {
   // dropdowns
   setOptions(els.origin, uniqueSorted(dataset.map((n) => n.Origin)), "All Origins");
   setOptions(els.reputation, ["Hostile", "Friendly", "Neutral", "Player"], "All Reputation");
-  setOptions(els.concept, uniqueSorted(dataset.map((n) => n.Concept)), "All Concepts");
   setOptions(els.gender, uniqueSorted(dataset.map((n) => n.Gender)), "All Genders");
   setOptions(els.group, uniqueSorted(dataset.map(n => n.Group)), "All Groups");
   // sort options
@@ -43,7 +42,6 @@ export function initFiltersUI({ els, dataset }) {
       ["origin_asc", "Origin (A–Z)"],
       ["relation", "Relation"],
       ["reputation", "Reputation"],
-      ["concept_asc", "Concept (A–Z)"],
     ].forEach(([v, label]) => {
       const o = document.createElement("option");
       o.value = v;
@@ -70,14 +68,12 @@ export function matchesFilters({ els, npc }) {
   // Använd BARA npc (ingen n-variabel alls)
   const q = (els.q?.value || "").trim().toLowerCase();
   const origin = els.origin?.value || "";
-  const concept = els.concept?.value || "";
   const reputation = els.reputation?.value || "";
   const gender = els.gender?.value || "";
   const group = els.group?.value || "";
 
   if (q && !String(npc.Name || "").toLowerCase().includes(q)) return false;
   if (origin && npc.Origin !== origin) return false;
-  if (concept && npc.Concept !== concept) return false;
   if (reputation && npc.Reputation !== reputation) return false;
   if (gender && npc.Gender !== gender) return false;
   if (group && npc.Group !== group) return false;
@@ -110,11 +106,6 @@ export function sortNpcs({ els, arr }) {
 
     if (mode === "reputation") {
       const c = repRank(a) - repRank(b);
-      return c !== 0 ? c : (a.Name || "").localeCompare(b.Name || "");
-    }
-
-    if (mode === "concept_asc") {
-      const c = (a.Concept || "").localeCompare(b.Concept || "");
       return c !== 0 ? c : (a.Name || "").localeCompare(b.Name || "");
     }
 
