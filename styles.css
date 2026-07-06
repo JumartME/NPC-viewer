@@ -54,7 +54,7 @@
 
 /* Replace list-group layout with a responsive grid of cards */
 /* Listan blir en responsiv grid */
-/* ========= LIST GRID (responsivt antal kort) ========= */
+/* ========= LIST GRID (responsivt antal kort, max 4) ========= */
 #list{
   display: grid;
   gap: 12px;
@@ -74,26 +74,14 @@
   #list{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* >= 1200px: 4 kort (din “bra formaterade” nivå) */
+/* >= 1200px: 4 kort (max) */
 @media (min-width: 1200px){
   #list{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-/* >= 1800px: 5 kort (valfritt) */
-@media (min-width: 1800px){
-  #list{ grid-template-columns: repeat(5, minmax(0, 1fr)); }
-}
-
-/* >= 2200px: 6 kort (TV/4K) */
-@media (min-width: 2200px){
-  #list{ grid-template-columns: repeat(6, minmax(0, 1fr)); }
-}
-
 /* ========= NPC CARD ========= */
 :root{
-  --card-h: 132px;     /* justera vid behov */
   --thumb-w: 80px;    /* vänsterbildens bredd */
-  --thumb-h: 100%;     /* fyll kortets höjd */
   --card-pad: 12px;
   --gap: 14px;
 }
@@ -103,10 +91,11 @@
   grid-template-columns: var(--thumb-w) 1fr;
   gap: var(--gap);
 
-  height: var(--card-h);
+  /* height is automatic - the card grows with its content, and CSS Grid */
+  /* stretches every card in a row to match the tallest one in that row */
+  min-height: 132px;
   padding: var(--card-pad);
   border-radius: 14px;
-  overflow: hidden;
 
   border: 1px solid rgba(0,0,0,.12);
   background: #fff;
@@ -115,14 +104,13 @@
 
 .npc-row{ cursor: pointer; }
 
-/* Thumbnail viewport: top-align, crop botten först */
+/* Thumbnail viewport: stretches to match the card's (row-driven) height */
 .npc-card .thumb{
   width: var(--thumb-w);
-  height: calc(var(--card-h) - (var(--card-pad) * 2));
+  height: 100%;
   overflow: hidden;
   border-radius: 12px;
   background: #f1f3f5;
-  align-self: start;
 }
 
 .npc-card .thumb .img{
@@ -160,21 +148,14 @@
   font-weight: 800;
   font-size: 1.05rem;
   line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 .npc-card .npc-meta{
   margin-top: 4px;
   color: #6c757d;
   font-size: .9rem;
-  overflow: hidden;
-
-  /* 2–3 rader, sen ... */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  overflow-wrap: break-word;
 }
 
 .npc-card .party-btn{
