@@ -51,7 +51,7 @@ function buildWorkbook({
       Stamina: clean(n.Stamina),
       Strength: clean(n.Strength),
       Expression: clean(n.Expression),
-      Instinct: clean(n.Instinct),
+      Cunning: clean(n.Cunning),
       Presence: clean(n.Presence),
       Wisdom: clean(n.Wisdom),
     };

@@ -3,7 +3,7 @@
 const CHARACTERISTICS = [
   "Intelligence","Perception","Will","Wits",
   "Agility","Dexterity","Stamina","Strength",
-  "Expression","Instinct","Presence","Wisdom"
+  "Expression","Cunning","Presence","Wisdom"
 ];
 
 function qs(id) {

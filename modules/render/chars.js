@@ -3,7 +3,7 @@ import { toNumber } from "./dom.js";
 
 export const CHARACTERISTICS = [
   "Intelligence","Agility","Expression",
-  "Perception","Dexterity","Instinct",
+  "Perception","Dexterity","Cunning",
   "Will","Stamina","Presence",
   "Wits","Strength","Wisdom"
 ];

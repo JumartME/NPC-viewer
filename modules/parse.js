@@ -37,7 +37,7 @@ function isSeparatorRow(row) {
     "Gender","Age","Species","Concept","Description","Origin","Group",
     "Equipment","Armor","Shield","Weapon","Magic","Special",
     "Healing","Agility","Strength","Dexterity","Stamina","Intelligence",
-    "Perception","Will","Wits","Expression","Instinct","Presence","Wisdom",
+    "Perception","Will","Wits","Expression","Cunning","Presence","Wisdom",
     "Skills","Size","Health","Spirit","MP","wpn","arm","Reputation","Relation"
   ];
 
@@ -101,7 +101,7 @@ export function rowToNpc(row) {
     Will: clean(row.Will),
     Wits: clean(row.Wits),
     Expression: clean(row.Expression),
-    Instinct: clean(row.Instinct),
+    Cunning: clean(row.Cunning),
     Presence: clean(row.Presence),
     Wisdom: clean(row.Wisdom),
 
