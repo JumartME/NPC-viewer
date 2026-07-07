@@ -118,8 +118,8 @@ export function openNpcModal({
   ]);
 
   kvSet(qs("kvCombat"), [
-    ["Special", npc.Special],
     ["Magic", npc.Magic],
+    ["Special", npc.Special],
     ["Healing", npc.Healing],
     ["Wpn", npc.wpn],
     ["Arm", npc.arm],
